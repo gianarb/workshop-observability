@@ -1,4 +1,4 @@
-## Requirements
+# Requirements
 
 Along the course the attendees will modify one or more applications (based on
 their skill with the languages) to achieve a better visibility of the system.
@@ -23,7 +23,7 @@ We will `docker` and `docker-compose` to spin up an down applications. Even here
 nothing advanced but if can build a bit of confidence with these tools it will
 be way easier for you to follow the course.
 
-## Prerequisiti (italian)
+# Prerequisiti (italian)
 
 Verra' richiesto ai partecipanti di modificare ed evolvere una o piu'
 applicazioni a loro scelta. Le applicazioni sono scritte in:
@@ -47,3 +47,5 @@ Utilizzeremo intensamente `docker` e `docker-compose` per poter fare il setup
 delle varie applicazioni. Anche qui nulla di avanzato ma arrivare con entrambi i
 tools installati e con un minimo di consapevolezza dei comandi di base rendera'
 il corso molto piu' facile da seguire.
+
+\newpage

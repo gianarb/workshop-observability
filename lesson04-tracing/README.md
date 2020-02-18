@@ -1,4 +1,5 @@
-## OpenTracing
+# Distributed Tracing
+## Lesson 4
 
 This lesson is probably the most complicated one. We are going to instrument our
 application using OpenTracing, a "standard" set of libraries to build a trace
@@ -12,7 +13,7 @@ During `lesson3-influxdb` one of the application we started with
 
 So we are ready to start instrumenting our favourite application.
 
-## Exercise: Trace applications using OpenTracing and Jager
+### Exercise: Trace applications using OpenTracing and Jager
 
 **Time: 30 minutes**
 
@@ -33,7 +34,7 @@ trace across all the languages
     * [github.com/uber/jaeger-client-go](https://github.com/jaegertracing/jaeger-client-go)
     * [github.com/opentracing-contrib/go-stdlib/nethttp](https://github.com/opentracing-contrib/go-stdlib)
 
-## Tips and tricks
+### Tips and tricks
 
 * To take the most from this exercise we need to have our trace propagated (or
   coming from) the other application. So the first things you can do if to
@@ -46,7 +47,7 @@ trace across all the languages
   dependencies is `docker-compose up --build item` and `docker-compose exec item
   composer up` (you need to modify the Dockerfile also to download Composer).
 
-## Links
+### Links
 
 * [FAQ: Distributed Tracing](https://gianarb.it/blog/faq-distributed-tracing)
 * [Context propagation over HTTP in Go](https://medium.com/@rakyll/context-propagation-over-http-in-go-d4540996e9b0)
@@ -54,3 +55,5 @@ trace across all the languages
 * [OpenTracing: An Open Standard for Distributed Tracing](https://thenewstack.io/opentracing-open-standard-distributed-tracing/)
 * [Why You Can’t Afford to Ignore Distributed Tracing for Observability](https://thenewstack.io/why-you-cant-afford-to-ignore-distributed-tracing-for-observability/)
 * [Opentracing Tutorial by Yury Shkuro](https://github.com/yurishkuro/opentracing-tutorial/)
+
+\newpage

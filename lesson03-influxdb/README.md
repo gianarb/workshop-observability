@@ -1,4 +1,5 @@
 # Monitoring stack
+## Lesson 3
 
 During this lesson we will spin up our monitoring stack using the
 [TICKStack](https://www.influxdata.com/time-series-platform/).
@@ -21,7 +22,7 @@ Another tool we will use is called [Jaeger](https://www.jaegertracing.io/). It
 is a tracer. We will use it to store traces later on. (it is nto part of the
 tick stack)
 
-## Exercise: Spin up the monitoring stack
+### Exercise: Spin up the monitoring stack
 
 **Time: 15minutes**
 
@@ -30,7 +31,7 @@ for a bit. You can look at the pre-canned dashboards and you can try to create
 your own one exploring the data Telegraf is storing in InfluxDB.
 
 
-## Expercise: Configure Telegraf to use the healthcheck from our apps
+### Exercise: Configure Telegraf to use the healthcheck from our apps
 
 **Time: 20minutes**
 
@@ -49,7 +50,8 @@ application is slower.
 ## Tips and Tricks
 
 Use docker-compose to spin up the stack.
-```sh
+
+```bash
 cd ./lesson03-influxdb
 docker-compose up
 ```
@@ -63,3 +65,5 @@ reload the configuration you can use `docker-compose up telegraf`.
 ## Link
 
 * [You need an high cardinality database](https://gianarb.it/blog/high-cardinality-database)
+
+\newpage

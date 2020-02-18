@@ -1,3 +1,6 @@
+# Getting Started
+## Lesson 1
+
 First of all we need to get in touch with the applications we will instrument
 and we will improve along this course.
 
@@ -7,7 +10,7 @@ in order to run it.
 
 In short:
 
-```
+```bash
 $ git clone git@github.com:gianarb/shopmany.git
 $ cd shopmany
 $ docker-compose up frontend
@@ -37,7 +40,7 @@ code for the applications that you are not developing.
 For example if you are not working in java with the `pay` application you can
 cherry pick the java code via:
 
-```
+```bash
 git cherry-pick 123dfdc
 ```
 
@@ -57,7 +60,7 @@ endpoint was just returning a printed JSON as response without doing any check.
 
 I would like you to create a new endpoint:
 
-```
+```bash
 PATH: /health
 METHOD: GET
 BODY:
@@ -72,6 +75,7 @@ BODY:
     ]
 }
 ```
+
 Based on the application you are modifying you need to check if the required
 dependencies are working.
 
@@ -88,6 +92,7 @@ too.
 All the checks needs to be `healthy` to mark the general status as `healthy`.
 
 ## Motivation
+
 A strong healthcheck is important to troubleshoot applications where you didn't
 write them. Because if across the company you agree on the same format the first
 things you can do is to check for that endpoint.
@@ -103,3 +108,5 @@ a new endpoint.
 
 * [Configure Liveness and Readiness Probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/)
 * [Kubernetes Liveness and Readiness Probes: Looking for More Feet](https://blog.colinbreck.com/kubernetes-liveness-and-readiness-probes-looking-for-more-feet/)
+
+\newpage

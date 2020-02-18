@@ -1,4 +1,10 @@
-Microservices, cloud computing, devops, containers changed the way to write applications.
+# The Observability/Monitoring workshop
+## let's try to out figure what is going on
+### with [Gianluca Arbezzano](https://gianarb.it)
+
+\newpage
+
+Microservices, cloud computing, DevOps, containers changed the way to write applications.
 Nowadays we have smaller, much more distributed and replicated applications.
 Sometime even across different languages.
 
@@ -56,3 +62,5 @@ if you are looking for inspiration around these topics:
 * [Brendan Gregg](http://www.brendangregg.com/) Performance Engineer at Netflix
 * [InfluxData](https://influxdata.com) the company behind InfluxDB and its
   founder [Paul Dix](https://twitter.com/pauldix).
+
+\newpage

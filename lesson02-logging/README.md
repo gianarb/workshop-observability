@@ -1,4 +1,5 @@
-## Logging
+# Logging
+## Lessson 2
 
 The ERA where `printf` and `console.log` around your code was enough to identify
 issues is over. A powerful logging library is what we need to troubleshoot and
@@ -19,7 +20,7 @@ Those are the libraries we are gonna use:
 * PHP: https://github.com/Seldaek/monolog
 * Node: https://github.com/pinojs/pino
 
-## Excercise: Log all the http request
+## Exercise: Log all the http request
 
 **Time: 30minutes**
 
@@ -64,3 +65,5 @@ instance (or a child) of the main logger.
 * [From Logs to Metrics](https://medium.com/@leodido/from-logs-to-metrics-f38854e3441a)
 * [Analyzing logs with Chronograf](https://docs.influxdata.com/chronograf/v1.7/guides/analyzing-logs/)
 * [Journald logging driver](https://docs.docker.com/config/containers/logging/journald/)
+
+\newpage
