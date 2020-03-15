@@ -1,7 +1,7 @@
 version: '3'
 services:
   influxdb:
-    image: "influxdb:1.7.4"
+    image: "influxdb:1.7.10"
     volumes:
       - ./influxdb/config/:/etc/influxdb/
       - ./influxdb/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
@@ -14,7 +14,7 @@ services:
       - gaworkshop
 
   telegraf:
-    image: "telegraf:1.10.0"
+    image: "telegraf:1.13.4"
     environment:
       HOSTNAME: "obs"
     volumes:
@@ -27,7 +27,7 @@ services:
       - gaworkshop
 
   kapacitor:
-    image: "kapacitor:1.5.2"
+    image: "kapacitor:1.5.4"
     volumes:
       - ./kapacitor/config/:/etc/kapacitor/
     depends_on:
@@ -39,7 +39,7 @@ services:
       - gaworkshop
 
   chronograf:
-    image: "chronograf:1.7.8"
+    image: "chronograf:1.8.0"
     ports:
       - "8888:8888"
     depends_on:
