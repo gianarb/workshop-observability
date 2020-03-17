@@ -1,29 +1,19 @@
 ```toml
 [[inputs.http_response]]
-  address = "http://item/health"
+  urls = [
+    "http://frontend:3000/health",
+    "http://pay:8080/health",
+    "http://discount:3000/health",
+    "http://item/health"
+  ]
   response_timeout = "5s"
   method = "GET"
-  response_string_match = "\"status\": \"healthy\""
-
-[[inputs.http_response]]
-  address = "http://discount:3000/health"
-  response_timeout = "5s"
-  method = "GET"
-  response_string_match = "\"status\": \"healthy\""
-
-[[inputs.http_response]]
-  address = "http://pay:8080/health"
-  response_timeout = "5s"
-  method = "GET"
-  response_string_match = "\"status\": \"healthy\""
-
-[[inputs.http_response]]
-  address = "http://frontend:3000/health"
-  response_timeout = "5s"
-  method = "GET"
-  response_string_match = "\"status\": \"healthy\""
 ```
 
 ```
-SELECT count("http_response_code") AS "mean_http_response_code" FROM "telegraf"."autogen"."http_response" WHERE time > :dashboardTime: AND "server"='http://frontend:3000/health' AND "status_code"='200' GROUP BY time(5s) FILL(null)
+from(bucket: "workshop")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r._measurement == "http_response")
+  |> filter(fn: (r) => r._field == "http_response_code")
+  |> filter(fn: (r) => r._value != 200)
 ```

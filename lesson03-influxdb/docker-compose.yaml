@@ -1,75 +1,42 @@
 version: '3'
 services:
-  influxdb:
-    image: "influxdb:1.7.10"
-    volumes:
-      - ./influxdb/config/:/etc/influxdb/
-      - ./influxdb/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
-    ports:
-      - "8086:8086"
-      - "8082:8082"
-      - "8089:8089"
-    networks:
-      - obs
-      - gaworkshop
 
   telegraf:
     image: "telegraf:1.13.4"
     environment:
       HOSTNAME: "obs"
+      INFLUX_TOKEN: "DxroipSs9T-DILZfllbm3ALyxzGG8AKqsdreuQdnbgQHfvbbgSTJKSzqV2V96w7QyxJj8cHnA6abIOCsiMSrTw=="
     volumes:
-      - ./telegraf/:/etc/telegraf/
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./telegraf:/etc/telegraf
     depends_on:
       - influxdb
-    networks:
-      - obs
-      - gaworkshop
-
-  kapacitor:
-    image: "kapacitor:1.5.4"
-    volumes:
-      - ./kapacitor/config/:/etc/kapacitor/
-    depends_on:
-      - influxdb
-    ports:
-      - "9092:9092"
-    networks:
-      - obs
-      - gaworkshop
-
-  chronograf:
-    image: "chronograf:1.8.0"
-    ports:
-      - "8888:8888"
-    depends_on:
-      - kapacitor
-      - influxdb
-      - telegraf
     networks:
       - obs
       - gaworkshop
 
   jaeger:
-    image: gianarb/jaeger-influxdb
-    container_name: jaeger-workshop
-    environment:
-      SPAN_STORAGE_TYPE: influxdb
-    ports:
-      - 5775:5775/udp
-      - 6831:6831/udp
-      - 6832:6832/udp
-      - 5778:5778
-      - 16686:16686
-      - 14268:14268
-      - 9411:9411
+    build:
+      context: ./jaeger
     depends_on:
       - influxdb
-    command: [
-      "--influxdb.host", "http://influxdb:8086",
-      "--influxdb.retention-policy", "autogen",
-      "--influxdb.database", "span",
-    ]
+    ports:
+      - "16686:16686"
+    environment:
+      SPAN_STORAGE_TYPE: grpc-plugin
+      GRPC_STORAGE_PLUGIN_CONFIGURATION_FILE: /opt/influxdb-plugin/config.yaml
+      GRPC_STORAGE_PLUGIN_BINARY: /usr/local/bin/jaeger-influxdb-linux
+      COLLECTOR_ZIPKIN_HTTP_PORT: 9411
+    volumes:
+      - ./jaeger/influxdb-plugin:/opt/influxdb-plugin
+    networks:
+      - obs
+      - gaworkshop
+
+  influxdb:
+    image: "quay.io/influxdb/influxdb:2.0.0-beta"
+    ports:
+      - "9999:9999"
     networks:
       - obs
       - gaworkshop

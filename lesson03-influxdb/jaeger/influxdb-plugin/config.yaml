@@ -1,0 +1,4 @@
+influxdb.host: http://influxdb:9999
+influxdb.organization: workshop
+influxdb.bucket: workshop
+influxdb.token: J17Vlbmpz_Rm85r9AUn5H7Oyzg89EelLmhS0RtA97iZuSx5sGAYpzFUbs5DGmpDsyGevJlLeNwp0_5GJBPTtVw==
