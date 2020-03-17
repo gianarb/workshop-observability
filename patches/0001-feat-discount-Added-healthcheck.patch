@@ -1,0 +1,55 @@
+From 64be9f3b6237f2851291bbd2187d951007530761 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sun, 17 Mar 2019 11:27:17 +0100
+Subject: [PATCH] feat(discount): Added healthcheck
+
+Now the discount service has its own healthcheck endpoint.
+
+```
+METHOD: GET
+PATH: /health
+```
+
+It checks if th mongodb is reachable or not.
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/server.js | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/discount/server.js b/discount/server.js
+index a7cb17b..cedde93 100644
+--- a/discount/server.js
++++ b/discount/server.js
+@@ -8,6 +8,28 @@ const dbName = 'shopmany';
+ const client = new MongoClient(url, { useNewUrlParser: true });
+ app.use(errorHandler)
+ 
++app.get("/health", function(req, res, next) {
++  var resbody = {
++    "status": "healthy",
++    checks: [],
++  };
++  var resCode = 200;
++
++  client.connect(function(err) {
++    var mongoCheck = {
++      "name": "mongo",
++      "status": "healthy",
++    };
++    if (err != null) {
++      mongoCheck.error = err.toString();
++      mongoCheck.status = "unhealthy";
++      resbody.status = "unhealthy"
++      resCode = 500;
++    }
++    resbody.checks.push(mongoCheck);
++    res.status(resCode).json(resbody)
++  });
++});
+ 
+ app.get("/discount", function(req, res, next) {
+   client.connect(function(err) {
+-- 
+2.23.0
+

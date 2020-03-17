@@ -1,0 +1,158 @@
+From 8e21fd8af39ccb5225edf25fe5d03486fd155534 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sat, 23 Mar 2019 16:09:13 +0100
+Subject: [PATCH] feat(pay): add log4j2
+
+Co-Authored-by: Walter Dal Mut  <walter.dalmut@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ pay/build.gradle                             | 11 +++++-
+ pay/src/main/java/pay/AppConfig.java         | 14 +++++++
+ pay/src/main/java/pay/Application.java       |  4 ++
+ pay/src/main/java/pay/LoggerInterceptor.java | 39 ++++++++++++++++++++
+ pay/src/main/resources/log4j2.xml            | 16 ++++++++
+ 5 files changed, 83 insertions(+), 1 deletion(-)
+ create mode 100644 pay/src/main/java/pay/AppConfig.java
+ create mode 100644 pay/src/main/java/pay/LoggerInterceptor.java
+ create mode 100644 pay/src/main/resources/log4j2.xml
+
+diff --git a/pay/build.gradle b/pay/build.gradle
+index a8e253c..50bb905 100644
+--- a/pay/build.gradle
++++ b/pay/build.gradle
+@@ -26,9 +26,18 @@ sourceCompatibility = 1.8
+ targetCompatibility = 1.8
+ 
+ dependencies {
+-    compile("org.springframework.boot:spring-boot-starter-web")
+     compile("org.springframework.boot:spring-boot-starter-data-jpa")
+     //compile("com.h2database:h2")
+     compile 'mysql:mysql-connector-java'
++    compile("com.fasterxml.jackson.core:jackson-databind")
++    compile("org.springframework.boot:spring-boot-starter-web"){ exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'}
++    compile('org.springframework.boot:spring-boot-starter-log4j2')
+     testCompile('org.springframework.boot:spring-boot-starter-test')
+ }
++
++
++configurations {
++    all {
++        exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'
++    }
++}
+diff --git a/pay/src/main/java/pay/AppConfig.java b/pay/src/main/java/pay/AppConfig.java
+new file mode 100644
+index 0000000..bb788cb
+--- /dev/null
++++ b/pay/src/main/java/pay/AppConfig.java
+@@ -0,0 +1,14 @@
++package pay;
++
++import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
++import org.springframework.web.servlet.config.annotation.WebMvcConfigurerAdapter;
++import org.springframework.stereotype.Component;
++
++@Component
++public class AppConfig extends WebMvcConfigurerAdapter  {
++
++    @Override
++    public void addInterceptors(InterceptorRegistry registry) {
++       registry.addInterceptor(new LoggerInterceptor());
++    }
++}
+diff --git a/pay/src/main/java/pay/Application.java b/pay/src/main/java/pay/Application.java
+index ef1194a..1d8d39d 100644
+--- a/pay/src/main/java/pay/Application.java
++++ b/pay/src/main/java/pay/Application.java
+@@ -5,10 +5,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.*;
+ import javax.servlet.http.HttpServletResponse;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
+ 
+ @SpringBootApplication
+ @RestController
+ public class Application {
++    private static final Logger logger = LoggerFactory.getLogger(Application.class);
+     private PayRepository payRepository;
+ 
+     public Application(PayRepository payRepository) {
+@@ -40,6 +43,7 @@ public class Application {
+             status = "healthy";
+             mysqlC.setStatus("healthy");
+         } catch (Exception e) {
++            logger.error("Mysql healthcheck failed", e.getMessage());
+             mysqlC.setStatus("unhealthy");
+             mysqlC.setError(e.getMessage());
+             response.setStatus(500);
+diff --git a/pay/src/main/java/pay/LoggerInterceptor.java b/pay/src/main/java/pay/LoggerInterceptor.java
+new file mode 100644
+index 0000000..654229f
+--- /dev/null
++++ b/pay/src/main/java/pay/LoggerInterceptor.java
+@@ -0,0 +1,39 @@
++package pay;
++
++import org.springframework.stereotype.Component;
++import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
++import javax.servlet.http.HttpServletRequest;
++import javax.servlet.http.HttpServletResponse;
++import org.slf4j.Logger;
++import org.slf4j.LoggerFactory;
++
++@Component
++public class LoggerInterceptor
++  extends HandlerInterceptorAdapter {
++    private static final Logger logger = LoggerFactory.getLogger(Application.class);
++
++    @Override
++    public boolean preHandle(
++      HttpServletRequest request,
++      HttpServletResponse response,
++      Object handler) {
++        long startTime = System.currentTimeMillis();
++        logger.info("[Start HTTP Request]: Path" + request.getRequestURL().toString()
++				+ " StartTime=" + startTime);
++        request.setAttribute("startTime", startTime);
++
++        return true;
++    }
++
++    @Override
++    public void afterCompletion(
++      HttpServletRequest request,
++      HttpServletResponse response,
++      Object handler,
++      Exception ex) {
++        long startTime = (Long) request.getAttribute("startTime");
++        logger.info("[End HTTP Request]: Path" + request.getRequestURL().toString()
++				+ " EndTime=" + System.currentTimeMillis()
++                + " TimeTaken="+ (System.currentTimeMillis() - startTime));
++    }
++}
+diff --git a/pay/src/main/resources/log4j2.xml b/pay/src/main/resources/log4j2.xml
+new file mode 100644
+index 0000000..7403409
+--- /dev/null
++++ b/pay/src/main/resources/log4j2.xml
+@@ -0,0 +1,16 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<Configuration status="WARN" monitorInterval="30">
++    <Appenders>
++        <Console name="ConsoleJSONAppender" target="SYSTEM_OUT">
++            <JsonLayout complete="false" compact="false">
++                <KeyValuePair key="service" value="pay" />
++            </JsonLayout>
++        </Console>
++    </Appenders>
++
++    <Loggers>
++        <Root level="info">
++            <AppenderRef ref="ConsoleJSONAppender"/>
++        </Root>
++    </Loggers>
++</Configuration>
+-- 
+2.23.0
+

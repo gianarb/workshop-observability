@@ -2,8 +2,8 @@
 ## Lesson 4
 
 This lesson is probably the most complicated one. We are going to instrument our
-application using OpenTracing, a "standard" set of libraries to build a trace
-across all your application.
+application using OpenTelemetry and OpenTracing, a "standard" set of libraries
+to build a trace across all your application.
 
 There are libraries in many languages and luckily for all the application we
 have!
@@ -22,30 +22,23 @@ documentation and we should try to figure out how to get an propagate a
 trace across all the languages
 
 * Item (PHP):
-    * [jonahgeorge/jaeger-client-php](https://github.com/jonahgeorge/jaeger-client-php)
+    * [jonahgeorge/jcchavezs/zipkin-opentracing](https://github.com/jcchavezs/zipkin-opentracing)
     * [opentracing/opentracing](https://github.com/opentracing/opentracing-php)
 * Discount:
-    * [jaeger-client](https://github.com/jaegertracing/jaeger-client-node)
-    * [opentracing](https://github.com/opentracing/opentracing-javascript)
+    * [open-telemetry/opentelemetry-js](https://github.com/open-telemetry/opentelemetry-js)
 * Pay (Java):
-    * [io.jaegertracing:jaeger-client](https://github.com/jaegertracing/jaeger-client-java)
+    * [open-telemetry/opentelemetry-java](https://github.com/open-telemetry/opentelemetry-java)
 * Frontend (Go):
-    * [github.com/opentracing/opentracing-go](https://github.com/opentracing/opentracing-go)
-    * [github.com/uber/jaeger-client-go](https://github.com/jaegertracing/jaeger-client-go)
-    * [github.com/opentracing-contrib/go-stdlib/nethttp](https://github.com/opentracing-contrib/go-stdlib)
+    * [open-telemetry/opentelemetry-go](https://github.com/open-telemetry/opentelemetry-go)
 
 ### Tips and tricks
 
 * To take the most from this exercise we need to have our trace propagated (or
-  coming from) the other application. So the first things you can do if to
-  `cherry-pick` from the `shopmany` repository the commit related to the other
-  application (we saw how to it previously). In this way you will have already a
-  working example from other applications to look at.
-* If you are working on `item` in `PHP` the problem here is that you will need
-  to install new php extenstions via Docker. You need to modify the
-  `./item/Dockerfile` and the combination of commands I use to download the
-  dependencies is `docker-compose up --build item` and `docker-compose exec item
-  composer up` (you need to modify the Dockerfile also to download Composer).
+  coming from) the other application. So the first things you can do is to
+  `cherry-pick`, `merge` or `apply patch` from the `shopmany` or from the
+  `workshop` repository the commit related to the other application (we saw how
+  to it previously). In this way you will have already a working example from
+  other applications to look at.
 
 ### Links
 

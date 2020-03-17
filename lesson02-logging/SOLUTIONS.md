@@ -3,20 +3,35 @@
 ## Item
 
 ```diff
-commit ec86756af8544c8158636c43c27c1b0f10ed497c
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Thu Mar 14 10:27:38 2019 +0100
+From f412a291861afc30784da7dcdf54defcfb7d9476 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 10:27:38 +0100
+Subject: [PATCH] feat(items): Injected logger
 
-    Injected logger to item service
+The item service is not logging using Monolog
 
-    The item service is not logging using Monolog
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/Dockerfile                              |  5 ++
+ items/composer.json                           |  3 +-
+ items/config/autoload/containers.global.php   |  2 +
+ items/config/pipeline.php                     |  2 +
+ items/src/App/src/Handler/Item.php            | 10 ++++
+ items/src/App/src/Handler/ItemFactory.php     |  3 +-
+ .../App/src/Middleware/LoggerMiddleware.php   | 54 +++++++++++++++++++
+ .../Middleware/LoggerMiddlewareFactory.php    | 20 +++++++
+ items/src/App/src/Service/LoggerFactory.php   | 20 +++++++
+ 9 files changed, 117 insertions(+), 2 deletions(-)
+ create mode 100644 items/src/App/src/Middleware/LoggerMiddleware.php
+ create mode 100644 items/src/App/src/Middleware/LoggerMiddlewareFactory.php
+ create mode 100644 items/src/App/src/Service/LoggerFactory.php
 
 diff --git a/items/Dockerfile b/items/Dockerfile
 index 58a1e86..2184cb1 100644
 --- a/items/Dockerfile
 +++ b/items/Dockerfile
 @@ -2,3 +2,8 @@ FROM php:7.2-apache
-
+ 
  RUN a2enmod rewrite
  RUN docker-php-ext-install pdo_mysql
 +
@@ -60,7 +75,7 @@ index cfe8f0b..e9287fd 100644
  use Zend\Expressive\Router\Middleware\RouteMiddleware;
  use Zend\Stratigility\Middleware\ErrorHandler;
 +use App\Middleware\LoggerMiddleware;
-
+ 
  /**
   * Setup middleware pipeline:
   */
@@ -79,17 +94,17 @@ index 2ea3d66..f1d9a64 100644
  use App\Service\ItemService;
 +use Monolog\Logger;
 +use Monolog\Processor\TagProcessor;
-
+ 
  class Item implements RequestHandlerInterface
  {
      private $itemService;
 +    private $logger;
-
+ 
      function __construct(ItemService $itemService) {
          $this->itemService = $itemService;
 +        $this->logger = new Logger('item_service');
      }
-
+ 
      public function handle(ServerRequestInterface $request) : ResponseInterface
      {
 +        $this->logger->info("Get list of items");
@@ -227,18 +242,23 @@ index 0000000..cc60ae0
 +    }
 +}
 +
+-- 
+2.23.0
 ```
 
 ## Discount
 
 ```diff
-commit cbc91b1d15b0564c89cb825b9540d309f90526eb
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Sun Mar 17 19:20:10 2019 +0100
+From ed6ce9b8dfcf1e396d979c09cf91b980b93a789d Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sun, 17 Mar 2019 19:20:10 +0100
+Subject: [PATCH] feat(discount): Added logging support
 
-    Added logging support to discount service
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/package.json |  1 +
+ discount/server.js    | 15 ++++++++++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
 
 diff --git a/discount/package.json b/discount/package.json
 index 0647009..1640ae1 100644
@@ -315,18 +335,29 @@ index cedde93..50a32a9 100644
 -  console.log("Server running on port 3000");
 +  logger.info("Server running on port 3000");
  });
+--
+2.23.0
 ```
 ## Pay
 
 ```diff
-commit 0376a283dc843f7beee207b4201b0b57b7cb00ff
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Sat Mar 23 16:09:13 2019 +0100
+From 8e21fd8af39ccb5225edf25fe5d03486fd155534 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sat, 23 Mar 2019 16:09:13 +0100
+Subject: [PATCH] feat(pay): add log4j2
 
-    Added log4j2 to pay svc
-
-    Co-Authored-by: Walter Dal Mut  <walter.dalmut@gmail.com>
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Co-Authored-by: Walter Dal Mut  <walter.dalmut@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ pay/build.gradle                             | 11 +++++-
+ pay/src/main/java/pay/AppConfig.java         | 14 +++++++
+ pay/src/main/java/pay/Application.java       |  4 ++
+ pay/src/main/java/pay/LoggerInterceptor.java | 39 ++++++++++++++++++++
+ pay/src/main/resources/log4j2.xml            | 16 ++++++++
+ 5 files changed, 83 insertions(+), 1 deletion(-)
+ create mode 100644 pay/src/main/java/pay/AppConfig.java
+ create mode 100644 pay/src/main/java/pay/LoggerInterceptor.java
+ create mode 100644 pay/src/main/resources/log4j2.xml
 
 diff --git a/pay/build.gradle b/pay/build.gradle
 index a8e253c..50bb905 100644
@@ -334,7 +365,7 @@ index a8e253c..50bb905 100644
 +++ b/pay/build.gradle
 @@ -26,9 +26,18 @@ sourceCompatibility = 1.8
  targetCompatibility = 1.8
-
+ 
  dependencies {
 -    compile("org.springframework.boot:spring-boot-starter-web")
      compile("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -382,13 +413,13 @@ index ef1194a..1d8d39d 100644
  import javax.servlet.http.HttpServletResponse;
 +import org.slf4j.Logger;
 +import org.slf4j.LoggerFactory;
-
+ 
  @SpringBootApplication
  @RestController
  public class Application {
 +    private static final Logger logger = LoggerFactory.getLogger(Application.class);
      private PayRepository payRepository;
-
+ 
      public Application(PayRepository payRepository) {
 @@ -40,6 +43,7 @@ public class Application {
              status = "healthy";
@@ -465,30 +496,68 @@ index 0000000..7403409
 +        </Root>
 +    </Loggers>
 +</Configuration>
+-- 
+2.23.0
 ```
 
 ## Frontend
 
 ```diff
-commit 32ca854035f78ab65f1ebb7b2d9c750f6670aaa1
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Thu Mar 14 19:17:55 2019 +0100
+From a305d0c7fcd110767c6ef696eb927d79b896e017 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 19:17:55 +0100
+Subject: [PATCH] feat(frontend): Added logging
 
-    Added logging to frontend
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ frontend/go.mod              |  7 ++++++-
+ frontend/go.sum              |  6 ++++++
+ frontend/handler/getitems.go | 18 ++++++++++++++++++
+ frontend/handler/health.go   |  9 +++++++++
+ frontend/handler/pay.go      |  8 ++++++++
+ frontend/main.go             | 34 +++++++++++++++++++++++++++++-----
+ 6 files changed, 76 insertions(+), 6 deletions(-)
 
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
-
+diff --git a/frontend/go.mod b/frontend/go.mod
+index c9f9ab6..d86b3cb 100644
+--- a/frontend/go.mod
++++ b/frontend/go.mod
+@@ -2,4 +2,9 @@ module github.com/gianarb/shopmany/frontend
+ 
+ go 1.12
+ 
+-require github.com/jessevdk/go-flags v1.4.0
++require (
++	github.com/jessevdk/go-flags v1.4.0
++	go.uber.org/atomic v1.3.2 // indirect
++	go.uber.org/multierr v1.1.0 // indirect
++	go.uber.org/zap v1.9.1
++)
+diff --git a/frontend/go.sum b/frontend/go.sum
+index bc46dae..ab7c346 100644
+--- a/frontend/go.sum
++++ b/frontend/go.sum
+@@ -1,3 +1,9 @@
+ github.com/gianarb/shopmany v0.0.0-20190313091614-ac1c2f0595da h1:DxIHt5N7dhhxgDsk9pFvl4DAoggKEtNvQTOA7ZmC2eU=
+ github.com/jessevdk/go-flags v1.4.0 h1:4IU2WS7AumrZ/40jfhf4QVDMsQwqA7VEHozFRrGARJA=
+ github.com/jessevdk/go-flags v1.4.0/go.mod h1:4FA24M0QyGHXBuZZK/XkWh8h0e1EYbRYJSGM75WSRxI=
++go.uber.org/atomic v1.3.2 h1:2Oa65PReHzfn29GpvgsYwloV9AVFHPDk8tYxt2c2tr4=
++go.uber.org/atomic v1.3.2/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=
++go.uber.org/multierr v1.1.0 h1:HoEmRHQPVSqub6w2z2d2EOVs2fjyFRGyofhKuyDq0QI=
++go.uber.org/multierr v1.1.0/go.mod h1:wR5kodmAFQ0UK8QlbwjlSNy0Z68gJhDJUG5sjR94q/0=
++go.uber.org/zap v1.9.1 h1:XCJQEf3W6eZaVwhRBof6ImoYGJSITeKWsyeh3HFu/5o=
++go.uber.org/zap v1.9.1/go.mod h1:vwi/ZaCAaUcBkycHslxD9B2zi4UTXhF60s6SWpuDF0Q=
 diff --git a/frontend/handler/getitems.go b/frontend/handler/getitems.go
 index 5019d55..54a3d32 100644
 --- a/frontend/handler/getitems.go
 +++ b/frontend/handler/getitems.go
 @@ -9,6 +9,7 @@ import (
  	"strconv"
-
+ 
  	"github.com/gianarb/shopmany/frontend/config"
 +	"go.uber.org/zap"
  )
-
+ 
  type ItemsResponse struct {
 @@ -62,27 +63,41 @@ func getDiscountPerItem(ctx context.Context, hclient *http.Client, itemID int, d
  type getItemsHandler struct {
@@ -496,7 +565,7 @@ index 5019d55..54a3d32 100644
  	hclient *http.Client
 +	logger  *zap.Logger
  }
-
+ 
  func NewGetItemsHandler(config config.Config, hclient *http.Client) *getItemsHandler {
 +	logger, _ := zap.NewProduction()
  	return &getItemsHandler{
@@ -505,7 +574,7 @@ index 5019d55..54a3d32 100644
 +		logger:  logger,
  	}
  }
-
+ 
 +func (h *getItemsHandler) WithLogger(logger *zap.Logger) {
 +	h.logger = logger
 +}
@@ -549,7 +618,7 @@ index 5019d55..54a3d32 100644
  			continue
  		}
 @@ -106,6 +123,7 @@ func (h *getItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
+ 
  	b, err := json.Marshal(items)
  	if err != nil {
 +		h.logger.Error(err.Error())
@@ -562,15 +631,15 @@ index 733d28f..fa9e52f 100644
 +++ b/frontend/handler/health.go
 @@ -7,6 +7,7 @@ import (
  	"net/http"
-
+ 
  	"github.com/gianarb/shopmany/frontend/config"
 +	"go.uber.org/zap"
  )
-
+ 
  const unhealthy = "unhealty"
 @@ -24,15 +25,22 @@ type check struct {
  }
-
+ 
  func NewHealthHandler(config config.Config, hclient *http.Client) *healthHandler {
 +	logger, _ := zap.NewProduction()
  	return &healthHandler{
@@ -579,7 +648,7 @@ index 733d28f..fa9e52f 100644
 +		logger:  logger,
  	}
  }
-
+ 
  type healthHandler struct {
  	config  config.Config
  	hclient *http.Client
@@ -589,10 +658,10 @@ index 733d28f..fa9e52f 100644
 +func (h *healthHandler) WithLogger(logger *zap.Logger) {
 +	h.logger = logger
  }
-
+ 
  func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 @@ -51,6 +59,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-
+ 
  	body, err := json.Marshal(b)
  	if err != nil {
 +		h.logger.Error(err.Error())
@@ -605,17 +674,17 @@ index b3a8a24..f3e5434 100644
 +++ b/frontend/handler/pay.go
 @@ -5,20 +5,28 @@ import (
  	"net/http"
-
+ 
  	"github.com/gianarb/shopmany/frontend/config"
 +	"go.uber.org/zap"
  )
-
+ 
  type payHandler struct {
  	config  config.Config
  	hclient *http.Client
 +	logger  *zap.Logger
  }
-
+ 
  func NewPayHandler(config config.Config, hclient *http.Client) *payHandler {
 +	logger, _ := zap.NewProduction()
  	return &payHandler{
@@ -624,7 +693,7 @@ index b3a8a24..f3e5434 100644
 +		logger:  logger,
  	}
  }
-
+ 
 +func (h *payHandler) WithLogger(logger *zap.Logger) {
 +	h.logger = logger
 +}
@@ -642,22 +711,22 @@ index ee16adc..35a084c 100644
  	flags "github.com/jessevdk/go-flags"
 +	"go.uber.org/zap"
  )
-
+ 
  func main() {
 +	logger, _ := zap.NewProduction()
 +	defer logger.Sync()
  	config := config.Config{}
  	_, err := flags.Parse(&config)
-
+ 
 @@ -22,14 +25,35 @@ func main() {
  	fmt.Printf("Pay Host: %v\n", config.PayHost)
  	fmt.Printf("Discount Host: %v\n", config.DiscountHost)
-
+ 
 +	mux := http.NewServeMux()
 +
  	httpClient := &http.Client{}
  	fs := http.FileServer(http.Dir("static"))
-
+ 
 -	http.Handle("/", fs)
 -	http.Handle("/api/items", handler.NewGetItemsHandler(config, httpClient))
 -	http.Handle("/api/pay", handler.NewPayHandler(config, httpClient))
@@ -674,7 +743,7 @@ index ee16adc..35a084c 100644
 +	mux.Handle("/api/items", getItemsHandler)
 +	mux.Handle("/api/pay", payHandler)
 +	mux.Handle("/health", healthHandler)
-
+ 
  	log.Println("Listening on port 3000...")
 -	http.ListenAndServe(":3000", nil)
 +	http.ListenAndServe(":3000", loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux))
@@ -690,6 +759,9 @@ index ee16adc..35a084c 100644
 +		h.ServeHTTP(w, r)
 +	})
  }
+-- 
+2.23.0
+
 ```
 
 \newpage

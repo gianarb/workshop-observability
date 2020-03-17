@@ -1,0 +1,242 @@
+From f412a291861afc30784da7dcdf54defcfb7d9476 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 10:27:38 +0100
+Subject: [PATCH] feat(items): Injected logger
+
+The item service is not logging using Monolog
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/Dockerfile                              |  5 ++
+ items/composer.json                           |  3 +-
+ items/config/autoload/containers.global.php   |  2 +
+ items/config/pipeline.php                     |  2 +
+ items/src/App/src/Handler/Item.php            | 10 ++++
+ items/src/App/src/Handler/ItemFactory.php     |  3 +-
+ .../App/src/Middleware/LoggerMiddleware.php   | 54 +++++++++++++++++++
+ .../Middleware/LoggerMiddlewareFactory.php    | 20 +++++++
+ items/src/App/src/Service/LoggerFactory.php   | 20 +++++++
+ 9 files changed, 117 insertions(+), 2 deletions(-)
+ create mode 100644 items/src/App/src/Middleware/LoggerMiddleware.php
+ create mode 100644 items/src/App/src/Middleware/LoggerMiddlewareFactory.php
+ create mode 100644 items/src/App/src/Service/LoggerFactory.php
+
+diff --git a/items/Dockerfile b/items/Dockerfile
+index 58a1e86..2184cb1 100644
+--- a/items/Dockerfile
++++ b/items/Dockerfile
+@@ -2,3 +2,8 @@ FROM php:7.2-apache
+ 
+ RUN a2enmod rewrite
+ RUN docker-php-ext-install pdo_mysql
++
++RUN find /etc/apache2/sites-enabled/* -exec sed -i 's/#*[Cc]ustom[Ll]og/#CustomLog/g' {} \;
++RUN find /etc/apache2/sites-enabled/* -exec sed -i 's/#*[Ee]rror[Ll]og/#ErrorLog/g' {} \;
++RUN a2disconf other-vhosts-access-log
++
+diff --git a/items/composer.json b/items/composer.json
+index 50bea51..c0badf9 100644
+--- a/items/composer.json
++++ b/items/composer.json
+@@ -46,7 +46,8 @@
+         "zendframework/zend-expressive-fastroute": "^3.0",
+         "zendframework/zend-expressive-helpers": "^5.0",
+         "zendframework/zend-servicemanager": "^3.3",
+-        "zendframework/zend-stdlib": "^3.1"
++        "zendframework/zend-stdlib": "^3.1",
++        "monolog/monolog": "1.24.0"
+     },
+     "require-dev": {
+         "phpunit/phpunit": "^7.0.1",
+diff --git a/items/config/autoload/containers.global.php b/items/config/autoload/containers.global.php
+index 511480b..12a5b18 100644
+--- a/items/config/autoload/containers.global.php
++++ b/items/config/autoload/containers.global.php
+@@ -20,6 +20,8 @@ return [
+             App\Service\ItemService::class => App\Service\ItemServiceFactory::class,
+             App\Handler\Item::class => App\Handler\ItemFactory::class,
+             App\Handler\Health::class => App\Handler\HealthFactory::class,
++            "Logger" => App\Service\LoggerFactory::class,
++            App\Middleware\LoggerMiddleware::class => App\Middleware\LoggerMiddlewareFactory::class,
+         ],
+     ],
+ ];
+diff --git a/items/config/pipeline.php b/items/config/pipeline.php
+index cfe8f0b..e9287fd 100644
+--- a/items/config/pipeline.php
++++ b/items/config/pipeline.php
+@@ -14,11 +14,13 @@ use Zend\Expressive\Router\Middleware\ImplicitOptionsMiddleware;
+ use Zend\Expressive\Router\Middleware\MethodNotAllowedMiddleware;
+ use Zend\Expressive\Router\Middleware\RouteMiddleware;
+ use Zend\Stratigility\Middleware\ErrorHandler;
++use App\Middleware\LoggerMiddleware;
+ 
+ /**
+  * Setup middleware pipeline:
+  */
+ return function (Application $app, MiddlewareFactory $factory, ContainerInterface $container) : void {
++    $app->pipe($container->get(LoggerMiddleware::class));
+     // The error handler should be the first (most outer) middleware to catch
+     // all Exceptions.
+     $app->pipe(ErrorHandler::class);
+diff --git a/items/src/App/src/Handler/Item.php b/items/src/App/src/Handler/Item.php
+index 2ea3d66..f1d9a64 100644
+--- a/items/src/App/src/Handler/Item.php
++++ b/items/src/App/src/Handler/Item.php
+@@ -6,18 +6,28 @@ use Psr\Http\Message\ServerRequestInterface;
+ use Psr\Http\Server\RequestHandlerInterface;
+ use Zend\Diactoros\Response\JsonResponse;
+ use App\Service\ItemService;
++use Monolog\Logger;
++use Monolog\Processor\TagProcessor;
+ 
+ class Item implements RequestHandlerInterface
+ {
+     private $itemService;
++    private $logger;
+ 
+     function __construct(ItemService $itemService) {
+         $this->itemService = $itemService;
++        $this->logger = new Logger('item_service');
+     }
+ 
+     public function handle(ServerRequestInterface $request) : ResponseInterface
+     {
++        $this->logger->info("Get list of items");
+         $items = $this->itemService->list();
++        $this->logger->info("Retrived list of items", ["num_items" => count($items)]);
+         return new JsonResponse(['items' => $items]);
+     }
++
++    public function withLogger($logger) {
++        $this->logger = $logger;
++    }
+ }
+diff --git a/items/src/App/src/Handler/ItemFactory.php b/items/src/App/src/Handler/ItemFactory.php
+index a1db1df..7de3a2d 100644
+--- a/items/src/App/src/Handler/ItemFactory.php
++++ b/items/src/App/src/Handler/ItemFactory.php
+@@ -9,6 +9,7 @@ class ItemFactory
+ {
+     public function __invoke(ContainerInterface $container)
+     {
+-        return new Item($container->get(ItemService::class));
++        $h = new Item($container->get(ItemService::class));
++        return $h;
+     }
+ }
+diff --git a/items/src/App/src/Middleware/LoggerMiddleware.php b/items/src/App/src/Middleware/LoggerMiddleware.php
+new file mode 100644
+index 0000000..64538c1
+--- /dev/null
++++ b/items/src/App/src/Middleware/LoggerMiddleware.php
+@@ -0,0 +1,54 @@
++<?php
++namespace App\Middleware;
++
++use ErrorException;
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\MiddlewareInterface;
++use Psr\Http\Server\RequestHandlerInterface;
++use Monolog\Processor\TagProcessor;
++
++class LoggerMiddleware implements MiddlewareInterface
++{
++    private $logger;
++
++    public function __construct($logger)
++    {
++        $this->logger = $logger;
++        $this->logger->pushProcessor(new TagProcessor([
++            "service" => "logger_middleware",
++        ]));
++    }
++
++    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler) : ResponseInterface
++    {
++        $isGood = true;
++        try {
++            $response = $handler->handle($request);
++        } catch (Throwable $e) {
++            $this->logger->panic("HTTP Server", [
++                "path", $request->getUri()->getPath(),
++                "method", $request->getMethod(),
++                "status_code" => $response->getStatusCode(),
++                "error" => $e->getMessage(),
++            ]);
++            $isGood=false;
++        }
++        if ($isGood) {
++            if ($response->getStatusCode() >= 200 && $response->getStatusCode() <= 299) {
++                $this->logger->info("HTTP Server", [
++                    "path", $request->getUri()->getPath(),
++                    "method", $request->getMethod(),
++                    "status_code" => $response->getStatusCode(),
++                ]);
++            } else {
++                $this->logger->warn("HTTP Server", [
++                    "path", $request->getUri()->getPath(),
++                    "method", $request->getMethod(),
++                    "status_code" => $response->getStatusCode(),
++                ]);
++            }
++        }
++        return $response;
++    }
++}
+diff --git a/items/src/App/src/Middleware/LoggerMiddlewareFactory.php b/items/src/App/src/Middleware/LoggerMiddlewareFactory.php
+new file mode 100644
+index 0000000..bd4fba9
+--- /dev/null
++++ b/items/src/App/src/Middleware/LoggerMiddlewareFactory.php
+@@ -0,0 +1,20 @@
++<?php
++namespace App\Middleware;
++
++use Psr\Container\ContainerInterface;
++use ErrorException;
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\MiddlewareInterface;
++use Psr\Http\Server\RequestHandlerInterface;
++use Monolog\Processor\TagProcessor;
++
++class LoggerMiddlewareFactory
++{
++    private $logger;
++
++    public function __invoke(ContainerInterface $container) {
++        $logger = $container->get("Logger");
++        return new LoggerMiddleware($logger);
++    }
++}
+diff --git a/items/src/App/src/Service/LoggerFactory.php b/items/src/App/src/Service/LoggerFactory.php
+new file mode 100644
+index 0000000..cc60ae0
+--- /dev/null
++++ b/items/src/App/src/Service/LoggerFactory.php
+@@ -0,0 +1,20 @@
++<?php
++namespace App\Service;
++
++use Psr\Container\ContainerInterface;
++use Monolog\Logger;
++use Monolog\Handler\StreamHandler;
++use Monolog\Formatter\JsonFormatter;
++
++class LoggerFactory
++{
++    public function __invoke(ContainerInterface $container)
++    {
++        $logger = new Logger("items");
++        $handler = new StreamHandler('php://stdout');
++        $handler->setFormatter(new JsonFormatter());
++        $logger->pushHandler($handler);
++        return $logger;
++    }
++}
++
+-- 
+2.23.0
+

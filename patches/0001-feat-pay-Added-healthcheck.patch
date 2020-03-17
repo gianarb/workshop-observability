@@ -1,0 +1,134 @@
+From 360c2265f77163da6c30f1aaa662c2d26ee43ff3 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sat, 23 Mar 2019 15:48:10 +0100
+Subject: [PATCH] feat(pay): Added healthcheck
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ pay/src/main/java/pay/Application.java    | 23 ++++++++++++++++-
+ pay/src/main/java/pay/HealthCheck.java    | 31 +++++++++++++++++++++++
+ pay/src/main/java/pay/HealthResponse.java | 29 +++++++++++++++++++++
+ 3 files changed, 82 insertions(+), 1 deletion(-)
+ create mode 100644 pay/src/main/java/pay/HealthCheck.java
+ create mode 100644 pay/src/main/java/pay/HealthResponse.java
+
+diff --git a/pay/src/main/java/pay/Application.java b/pay/src/main/java/pay/Application.java
+index c66e0c0..ef1194a 100644
+--- a/pay/src/main/java/pay/Application.java
++++ b/pay/src/main/java/pay/Application.java
+@@ -4,11 +4,11 @@ import org.springframework.boot.SpringApplication;
+ import org.springframework.boot.autoconfigure.SpringBootApplication;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.web.bind.annotation.*;
++import javax.servlet.http.HttpServletResponse;
+ 
+ @SpringBootApplication
+ @RestController
+ public class Application {
+-
+     private PayRepository payRepository;
+ 
+     public Application(PayRepository payRepository) {
+@@ -27,6 +27,27 @@ public class Application {
+         return ResponseEntity.ok("Success");
+     }
+ 
++    @GetMapping("/health")
++    @ResponseBody
++    public HealthResponse health(HttpServletResponse response) {
++        HealthResponse h = new HealthResponse();
++        String status = "unhealthy";
++
++        HealthCheck mysqlC = new HealthCheck();
++        mysqlC.setName("mysql");
++        try {
++            payRepository.count();
++            status = "healthy";
++            mysqlC.setStatus("healthy");
++        } catch (Exception e) {
++            mysqlC.setStatus("unhealthy");
++            mysqlC.setError(e.getMessage());
++            response.setStatus(500);
++        }
++        h.setStatus(status);
++        h.addHealthCheck(mysqlC);
++        return h;
++    }
+ 
+     public static void main(String[] args) {
+         SpringApplication.run(Application.class, args);
+diff --git a/pay/src/main/java/pay/HealthCheck.java b/pay/src/main/java/pay/HealthCheck.java
+new file mode 100644
+index 0000000..b3b7723
+--- /dev/null
++++ b/pay/src/main/java/pay/HealthCheck.java
+@@ -0,0 +1,31 @@
++package pay;
++
++public class HealthCheck {
++    private String status;
++    private String name;
++    private String error;
++
++    public String getStatus() {
++        return status;
++    }
++
++    public void setStatus(String status) {
++        this.status = status;
++    }
++
++    public String getName() {
++        return name;
++    }
++
++    public void setName(String name) {
++        this.name = name;
++    }
++
++    public String getError() {
++        return error;
++    }
++
++    public void setError(String error) {
++        this.error = error;
++    }
++}
+diff --git a/pay/src/main/java/pay/HealthResponse.java b/pay/src/main/java/pay/HealthResponse.java
+new file mode 100644
+index 0000000..8431f53
+--- /dev/null
++++ b/pay/src/main/java/pay/HealthResponse.java
+@@ -0,0 +1,29 @@
++package pay;
++
++import java.util.*;
++
++public class HealthResponse {
++    private String status;
++
++    private List<HealthCheck> checks;
++
++    public HealthResponse () {
++        this.checks = new ArrayList<HealthCheck>();
++    }
++
++    public String getStatus() {
++        return status;
++    }
++
++    public void setStatus(String status) {
++        this.status = status;
++    }
++
++    public void addHealthCheck(HealthCheck h) {
++        this.checks.add(h);
++    }
++
++    public List<HealthCheck> getChecks() {
++        return checks;
++    }
++}
+-- 
+2.23.0
+

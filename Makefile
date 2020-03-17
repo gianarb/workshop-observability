@@ -1,5 +1,8 @@
 build:
 	 pandoc --highlight-style kate \
+		 --listings \
+		 -H ./latex-tpl/listings-setup.tex \
+		 -V pagestyle=empty  \
 		 -s README.md REQUIREMENTS.md \
 		 	./lesson01-getting-started/README.md \
 			./lesson02-logging/README.md \

@@ -1,0 +1,123 @@
+From 07879e69ff65853685e7711420103f7f7e093c25 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 18:34:17 +0100
+Subject: [PATCH] feat(frontend): Added healthcheck endpoint
+
+Now the frontend service has its healthcheck to validate if service that
+returns the list of items is working.
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ frontend/handler/health.go | 87 ++++++++++++++++++++++++++++++++++++++
+ frontend/main.go           |  1 +
+ 2 files changed, 88 insertions(+)
+ create mode 100644 frontend/handler/health.go
+
+diff --git a/frontend/handler/health.go b/frontend/handler/health.go
+new file mode 100644
+index 0000000..733d28f
+--- /dev/null
++++ b/frontend/handler/health.go
+@@ -0,0 +1,87 @@
++package handler
++
++import (
++	"encoding/json"
++	"fmt"
++	"io/ioutil"
++	"net/http"
++
++	"github.com/gianarb/shopmany/frontend/config"
++)
++
++const unhealthy = "unhealty"
++const healthy = "healthy"
++
++type healthResponse struct {
++	Status string
++	Checks []check
++}
++
++type check struct {
++	Error  string
++	Status string
++	Name   string
++}
++
++func NewHealthHandler(config config.Config, hclient *http.Client) *healthHandler {
++	return &healthHandler{
++		config:  config,
++		hclient: hclient,
++	}
++}
++
++type healthHandler struct {
++	config  config.Config
++	hclient *http.Client
++}
++
++func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
++	b := healthResponse{
++		Status: unhealthy,
++		Checks: []check{},
++	}
++	w.Header().Add("Content-Type", "application/json")
++
++	itemCheck := checkItem(h.config.ItemHost, h.hclient)
++	if itemCheck.Status == healthy {
++		b.Status = healthy
++	}
++
++	b.Checks = append(b.Checks, itemCheck)
++
++	body, err := json.Marshal(b)
++	if err != nil {
++		w.WriteHeader(500)
++	}
++	if b.Status == unhealthy {
++		w.WriteHeader(500)
++	}
++	fmt.Fprintf(w, string(body))
++}
++
++func checkItem(host string, hclient *http.Client) check {
++	c := check{
++		Name:   "item",
++		Error:  "",
++		Status: unhealthy,
++	}
++	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
++	resp, err := hclient.Do(req)
++	if err != nil {
++		c.Error = err.Error()
++		return c
++	}
++	defer resp.Body.Close()
++	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
++		c.Status = healthy
++		return c
++	}
++	b, err := ioutil.ReadAll(resp.Body)
++	if err != nil {
++		c.Error = err.Error()
++		return c
++	}
++	c.Error = string(b)
++
++	return c
++}
+diff --git a/frontend/main.go b/frontend/main.go
+index f78d524..ee16adc 100644
+--- a/frontend/main.go
++++ b/frontend/main.go
+@@ -28,6 +28,7 @@ func main() {
+ 	http.Handle("/", fs)
+ 	http.Handle("/api/items", handler.NewGetItemsHandler(config, httpClient))
+ 	http.Handle("/api/pay", handler.NewPayHandler(config, httpClient))
++	http.Handle("/health", handler.NewHealthHandler(config, httpClient))
+ 
+ 	log.Println("Listening on port 3000...")
+ 	http.ListenAndServe(":3000", nil)
+-- 
+2.23.0
+

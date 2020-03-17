@@ -1,0 +1,89 @@
+From ed6ce9b8dfcf1e396d979c09cf91b980b93a789d Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sun, 17 Mar 2019 19:20:10 +0100
+Subject: [PATCH] feat(discount): Added logging support
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/package.json |  1 +
+ discount/server.js    | 15 ++++++++++++++-
+ 2 files changed, 15 insertions(+), 1 deletion(-)
+
+diff --git a/discount/package.json b/discount/package.json
+index 0647009..1640ae1 100644
+--- a/discount/package.json
++++ b/discount/package.json
+@@ -11,6 +11,7 @@
+   "license": "ISC",
+   "dependencies": {
+     "express": "^4.16.4",
++    "express-pino-logger": "^4.0.0",
+     "mongodb": "^3.1.13"
+   }
+ }
+diff --git a/discount/server.js b/discount/server.js
+index cedde93..50a32a9 100644
+--- a/discount/server.js
++++ b/discount/server.js
+@@ -8,6 +8,12 @@ const dbName = 'shopmany';
+ const client = new MongoClient(url, { useNewUrlParser: true });
+ app.use(errorHandler)
+ 
++const logger = require('pino')()
++const expressPino = require('express-pino-logger')({
++  logger: logger.child({"service": "httpd"})
++})
++app.use(expressPino)
++
+ app.get("/health", function(req, res, next) {
+   var resbody = {
+     "status": "healthy",
+@@ -21,6 +27,7 @@ app.get("/health", function(req, res, next) {
+       "status": "healthy",
+     };
+     if (err != null) {
++      req.log.warn(err.toString());
+       mongoCheck.error = err.toString();
+       mongoCheck.status = "unhealthy";
+       resbody.status = "unhealthy"
+@@ -36,6 +43,7 @@ app.get("/discount", function(req, res, next) {
+     db = client.db(dbName);
+     db.collection('discount').find({}).toArray(function(err, discounts) {
+       if (err != null) {
++        req.log.error(err.toString());
+         return next(err)
+       }
+       var goodDiscount = null
+@@ -47,6 +55,7 @@ app.get("/discount", function(req, res, next) {
+       if (goodDiscount != null) {
+         res.json({"discount": goodDiscount})
+       } else {
++        req.log.warn("discount not found");
+         res.status(404).json({ error: 'Discount not found' });
+       }
+       return
+@@ -55,10 +64,14 @@ app.get("/discount", function(req, res, next) {
+ });
+ 
+ app.use(function(req, res, next) {
++  req.log.warn("route not found");
+   return res.status(404).json({error: "route not found"});
+ });
+ 
+ function errorHandler(err, req, res, next) {
++  req.log.error(err.toString(), {
++    error_status: err.status
++  });
+   var st = err.status
+   if (st == 0 || st == null) {
+     st = 500;
+@@ -68,5 +81,5 @@ function errorHandler(err, req, res, next) {
+ }
+ 
+ app.listen(3000, () => {
+-  console.log("Server running on port 3000");
++  logger.info("Server running on port 3000");
+ });
+-- 
+2.23.0
+

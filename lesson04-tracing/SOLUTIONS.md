@@ -2,251 +2,161 @@
 
 ## Item
 
-```
-commit 6c0d88375b92ee12d9036974f2f93fe487b2d438
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Thu Mar 14 14:34:20 2019 +0100
+```diff
+From 99bb8bc64da8dda88be47a74dd327ec540358ff9 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Tue, 17 Mar 2020 14:05:48 +0100
+Subject: [PATCH] feat(items): tracing instrumentation with b3 and opencensus
 
-    Added tracer middleware to item
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/composer.json                           |  6 ++-
+ items/config/autoload/containers.global.php   |  2 +
+ items/config/autoload/local.php               |  4 ++
+ items/config/pipeline.php                     |  2 +
+ .../App/src/Middleware/TracerMiddleware.php   | 46 +++++++++++++++++++
+ .../Middleware/TracerMiddlewareFactory.php    | 19 ++++++++
+ items/src/App/src/Service/TracerFactory.php   | 45 ++++++++++++++++++
+ 7 files changed, 122 insertions(+), 2 deletions(-)
+ create mode 100644 items/src/App/src/Middleware/TracerMiddleware.php
+ create mode 100644 items/src/App/src/Middleware/TracerMiddlewareFactory.php
+ create mode 100644 items/src/App/src/Service/TracerFactory.php
 
-    This PR adds tracing to item.
-    In PHP we use Opentracing with Jaeger as backend:
-
-    * https://github.com/opentracing/opentracing-php
-    * https://github.com/jonahgeorge/jaeger-client-php
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
-
-diff --git a/items/Dockerfile b/items/Dockerfile
-index 2184cb1..859112f 100644
---- a/items/Dockerfile
-+++ b/items/Dockerfile
-@@ -2,8 +2,22 @@ FROM php:7.2-apache
-
- RUN a2enmod rewrite
- RUN docker-php-ext-install pdo_mysql
-+RUN docker-php-ext-install bcmath
-
- RUN find /etc/apache2/sites-enabled/* -exec sed -i 's/#*[Cc]ustom[Ll]og/#CustomLog/g' {} \;
- RUN find /etc/apache2/sites-enabled/* -exec sed -i 's/#*[Ee]rror[Ll]og/#ErrorLog/g' {} \;
- RUN a2disconf other-vhosts-access-log
-
-+RUN docker-php-ext-install sockets
-+RUN pecl install opencensus-alpha
-+RUN docker-php-ext-enable opencensus
-+RUN apt-get update && \
-+    apt-get install -y --no-install-recommends git zip unzip
-+
-+RUN apt-get install -y libgmp-dev re2c libmhash-dev libmcrypt-dev file
-+RUN ln -s /usr/include/x86_64-linux-gnu/gmp.h /usr/local/include/
-+RUN docker-php-ext-configure gmp
-+RUN docker-php-ext-install gmp
-+
-+RUN curl --silent --show-error https://getcomposer.org/installer | php
-+RUN mv composer.phar /usr/bin/composer
 diff --git a/items/composer.json b/items/composer.json
-index c0badf9..f0cb5db 100644
+index c0badf9..dadea8b 100644
 --- a/items/composer.json
 +++ b/items/composer.json
-@@ -47,7 +47,11 @@
+@@ -18,6 +18,7 @@
+     "config": {
+         "sort-packages": true
+     },
++    "minimum-stability": "dev",
+     "extra": {
+         "zf": {
+             "component-whitelist": [
+@@ -39,6 +40,8 @@
+     "require": {
+         "php": "^7.1",
+         "http-interop/http-middleware": "^0.5.0",
++        "monolog/monolog": "1.24.0",
++        "jcchavezs/zipkin-opentracing": "0.1.4",
+         "zendframework/zend-component-installer": "^2.1.1",
+         "zendframework/zend-config-aggregator": "^1.0",
+         "zendframework/zend-diactoros": "^1.7.1 || ^2.0",
+@@ -46,8 +49,7 @@
+         "zendframework/zend-expressive-fastroute": "^3.0",
          "zendframework/zend-expressive-helpers": "^5.0",
          "zendframework/zend-servicemanager": "^3.3",
-         "zendframework/zend-stdlib": "^3.1",
+-        "zendframework/zend-stdlib": "^3.1",
 -        "monolog/monolog": "1.24.0"
-+        "monolog/monolog": "1.24.0",
-+        "jonahgeorge/jaeger-client-php": "v0.4.3@dev",
-+        "opentracing/opentracing":"1.0.0-beta5@dev"
++        "zendframework/zend-stdlib": "^3.1"
      },
      "require-dev": {
          "phpunit/phpunit": "^7.0.1",
 diff --git a/items/config/autoload/containers.global.php b/items/config/autoload/containers.global.php
-index 12a5b18..9bd1afc 100644
+index 12a5b18..d36eb04 100644
 --- a/items/config/autoload/containers.global.php
 +++ b/items/config/autoload/containers.global.php
-@@ -8,7 +8,6 @@ return [
-         // Use 'aliases' to alias a service name to another service. The
-         // key is the alias name, the value is the service to which it points.
-         'aliases' => [
--            // Fully\Qualified\ClassOrInterfaceName::class => Fully\Qualified\ClassName::class,
-         ],
-         // Use 'invokables' for constructor-less services, or services that do
-         // not require arguments to the constructor. Map a service name to the
-@@ -22,6 +21,7 @@ return [
+@@ -21,7 +21,9 @@ return [
+             App\Handler\Item::class => App\Handler\ItemFactory::class,
              App\Handler\Health::class => App\Handler\HealthFactory::class,
              "Logger" => App\Service\LoggerFactory::class,
++            "Tracer" => App\Service\TracerFactory::class,
              App\Middleware\LoggerMiddleware::class => App\Middleware\LoggerMiddlewareFactory::class,
 +            App\Middleware\TracerMiddleware::class => App\Middleware\TracerMiddlewareFactory::class,
          ],
      ],
  ];
 diff --git a/items/config/autoload/local.php b/items/config/autoload/local.php
-index 824e725..c52b018 100644
+index 824e725..3726cc6 100644
 --- a/items/config/autoload/local.php
 +++ b/items/config/autoload/local.php
-@@ -15,4 +15,17 @@ return [
+@@ -15,4 +15,8 @@ return [
          "user" => "root",
          "pass" => "root",
      ],
-+    "opentracing-jaeger-exporter" => [
-+        "options" => [
-+            'sampler' => [
-+                'type' => \Jaeger\SAMPLER_TYPE_CONST,
-+                'param' => true,
-+            ],
-+            'logging' => true,
-+            'local_agent' => [
-+                'reporting_host' => 'jaeger-workshop',
-+            ],
-+        ],
-+        "service_name" => 'item',
++    "zipkin" => [
++        "serviceName" => 'items',
++        "reporterURL" => 'http://jaeger:9411/api/v2/spans',
 +    ],
  ];
 diff --git a/items/config/pipeline.php b/items/config/pipeline.php
-index e9287fd..6417cb8 100644
+index e9287fd..6e050ca 100644
 --- a/items/config/pipeline.php
 +++ b/items/config/pipeline.php
-@@ -15,11 +15,13 @@ use Zend\Expressive\Router\Middleware\MethodNotAllowedMiddleware;
+@@ -15,12 +15,14 @@ use Zend\Expressive\Router\Middleware\MethodNotAllowedMiddleware;
  use Zend\Expressive\Router\Middleware\RouteMiddleware;
  use Zend\Stratigility\Middleware\ErrorHandler;
  use App\Middleware\LoggerMiddleware;
 +use App\Middleware\TracerMiddleware;
-
+ 
  /**
   * Setup middleware pipeline:
   */
  return function (Application $app, MiddlewareFactory $factory, ContainerInterface $container) : void {
-+    $app->pipe($container->get(TracerMiddleware::class));
      $app->pipe($container->get(LoggerMiddleware::class));
++    $app->pipe($container->get(TracerMiddleware::class));
      // The error handler should be the first (most outer) middleware to catch
      // all Exceptions.
-diff --git a/items/src/App/src/Factory/JaegerExporterFactory.php b/items/src/App/src/Factory/JaegerExporterFactory.php
-new file mode 100644
-index 0000000..8f1abf0
---- /dev/null
-+++ b/items/src/App/src/Factory/JaegerExporterFactory.php
-@@ -0,0 +1,13 @@
-+<?php
-+namespace App\Factory;
-+
-+use Psr\Container\ContainerInterface;
-+use OpenCensus\Trace\Exporter\JaegerExporter;
-+
-+class JaegerExporterFactory
-+{
-+    public function __invoke(ContainerInterface $container) {
-+        $options = $container->get('config')['opentracing-jaeger-exporter'];
-+        return new JaegerExporter("items", $options);
-+    }
-+}
-diff --git a/items/src/App/src/Factory/LoggerExporterFactory.php b/items/src/App/src/Factory/LoggerExporterFactory.php
-new file mode 100644
-index 0000000..2f7cdcc
---- /dev/null
-+++ b/items/src/App/src/Factory/LoggerExporterFactory.php
-@@ -0,0 +1,14 @@
-+<?php
-+namespace App\Factory;
-+
-+use Psr\Container\ContainerInterface;
-+use OpenCensus\Trace\Exporter\LoggerExporter;
-+use Monolog\Processor\TagProcessor;
-+
-+class LoggerExporterFactory
-+{
-+    public function __invoke(ContainerInterface $container) {
-+        $logger = $container->get("Logger");
-+        return new LoggerExporter($logger);
-+    }
-+}
-diff --git a/items/src/App/src/Handler/Item.php b/items/src/App/src/Handler/Item.php
-index f1d9a64..353e4df 100644
---- a/items/src/App/src/Handler/Item.php
-+++ b/items/src/App/src/Handler/Item.php
-@@ -1,6 +1,7 @@
- <?php
-
- namespace App\Handler;
-+use OpenCensus\Trace\Tracer;
- use Psr\Http\Message\ResponseInterface;
- use Psr\Http\Message\ServerRequestInterface;
- use Psr\Http\Server\RequestHandlerInterface;
-@@ -21,9 +22,12 @@ class Item implements RequestHandlerInterface
-
-     public function handle(ServerRequestInterface $request) : ResponseInterface
-     {
--        $this->logger->info("Get list of items");
-+        $span = Tracer::startSpan(['name' => 'get-items']);
-+        $scope = Tracer::withSpan($span);
-+
-         $items = $this->itemService->list();
-         $this->logger->info("Retrived list of items", ["num_items" => count($items)]);
-+        $scope->close();
-         return new JsonResponse(['items' => $items]);
-     }
-
+     $app->pipe(ErrorHandler::class);
 diff --git a/items/src/App/src/Middleware/TracerMiddleware.php b/items/src/App/src/Middleware/TracerMiddleware.php
 new file mode 100644
-index 0000000..48efc86
+index 0000000..6da42be
 --- /dev/null
 +++ b/items/src/App/src/Middleware/TracerMiddleware.php
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,46 @@
 +<?php
 +namespace App\Middleware;
 +
 +use ErrorException;
-+use Psr\Http\Message\ResponseInterface;
-+use Psr\Http\Message\ServerRequestInterface;
-+use Psr\Http\Server\MiddlewareInterface;
-+use Psr\Http\Server\RequestHandlerInterface;
 +use OpenTracing\Formats;
-+
-+use Jaeger\Config;
-+use Jaeger;
++use OpenTracing\Tags;
 +use OpenTracing\GlobalTracer;
-+
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Server\MiddlewareInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\RequestHandlerInterface;
 +
 +class TracerMiddleware implements MiddlewareInterface
 +{
 +    private $tracer;
 +
-+    public function __construct($config)
++    public function __construct($tracer)
 +    {
-+        $config = new Config($config["options"], $config["service_name"]);
-+        $this->tracer = $config->initializeTracer();
-+        GlobalTracer::get($tracer);
++        $this->tracer = $tracer;
 +    }
 +
 +    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler) : ResponseInterface
 +    {
-+        $spanContext = GlobalTracer::get()->extract(
++        $spanContext = $this->tracer->extract(
 +            Formats\HTTP_HEADERS,
-+            getallheaders()
++            $request
 +        );
-+        $spanOpt = [];
-+        $spanName = $request->getMethod()." ".$request->getUri()->getPath();
-+        if ($spanContext != null) {
-+            $spanOpt['child_of'] = $spanContext;
++        $span = $this->tracer->startSpan($request->getMethod(), [
++            'child_of' => $spanContext,
++            'tags' => [
++                Tags\HTTP_METHOD => $request->getMethod(),
++                'http.path' => $request->getUri()->getPath(),
++            ]
++        ]);
++        
++        try {
++            $response = $handler->handle($request);
++            $span->setTag(Tags\HTTP_STATUS_CODE, $response->getStatusCode());
++            return $response;
++        } catch (\Throwable $e) {
++            $span->setTag(Tags\ERROR, $e->getMessage());
++        } finally {
++            $span->finish();
 +        }
-+        $span = GlobalTracer::get()->startSpan($spanName, $spanOpt);
-+        $span->setTag("request_uri", $request->getUri()->__toString());
-+        $span->setTag("request_headers", json_encode($request->getHeaders()));
-+        $span->setTag("request_method", $request->getMethod());
-+
-+        $response = $handler->handle($request);
-+
-+        $span->setTag("response_status_code", $response->getStatusCode());
-+
-+        $span->finish();
-+        $this->tracer->flush();
-+        return $response;
 +    }
 +}
 diff --git a/items/src/App/src/Middleware/TracerMiddlewareFactory.php b/items/src/App/src/Middleware/TracerMiddlewareFactory.php
 new file mode 100644
-index 0000000..e203ec5
+index 0000000..fe49d64
 --- /dev/null
 +++ b/items/src/App/src/Middleware/TracerMiddlewareFactory.php
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,19 @@
 +<?php
 +namespace App\Middleware;
 +
@@ -259,437 +169,684 @@ index 0000000..e203ec5
 +
 +class TracerMiddlewareFactory
 +{
++    private $tracer;
++
 +    public function __invoke(ContainerInterface $container) {
-+        $config = $container->get("config")["opentracing-jaeger-exporter"];
-+        return new TracerMiddleware($config);
++        $tracer = $container->get("Tracer");
++        return new TracerMiddleware($tracer);
 +    }
 +}
-diff --git a/items/src/App/src/Service/ItemService.php b/items/src/App/src/Service/ItemService.php
-index b072870..09bb1e6 100644
---- a/items/src/App/src/Service/ItemService.php
-+++ b/items/src/App/src/Service/ItemService.php
-@@ -3,6 +3,8 @@ namespace App\Service;
-
- use App\Model\Item;
- use \PDO;
-+use OpenTracing\GlobalTracer;
-+use OpenTracing\Formats;
-
- class ItemService {
-
-@@ -18,7 +20,18 @@ class ItemService {
-      * list returns all the items
-      */
-     public function list() {
-+        $spanContext = GlobalTracer::get()->extract(
-+            Formats\HTTP_HEADERS,
-+            getallheaders()
-+        );
-+        $spanOpt = [];
-+        if ($spanContext != null) {
-+            $spanOpt['child_of'] = $spanContext;
-+        }
-+        $span = GlobalTracer::get()->startSpan("mysql.select_items", $spanOpt);
+diff --git a/items/src/App/src/Service/TracerFactory.php b/items/src/App/src/Service/TracerFactory.php
+new file mode 100644
+index 0000000..6795347
+--- /dev/null
++++ b/items/src/App/src/Service/TracerFactory.php
+@@ -0,0 +1,45 @@
++<?php
++namespace App\Service;
 +
-         $q = $this->pdo->query("SELECT * FROM item");
-+        $span->setTag("query", $q->queryString);
-         $items = [];
-         while ($row = $q->fetch()) {
-             $i = new Item();
-@@ -28,6 +41,7 @@ class ItemService {
-             $i->price = $row[3];
-             $items[] = $i;
-         }
-+        $span->finish();
-         return $items;
-     }
- }
++use Zipkin\Endpoint;
++use Psr\Log\NullLogger;
++use Zipkin\TracingBuilder;
++use OpenTracing\GlobalTracer;
++use OpenTracing\NoopTracer;
++use ZipkinOpenTracing\Tracer;
++use Zipkin\Samplers\BinarySampler;
++use Psr\Container\ContainerInterface;
++use Zipkin\Reporters\Http\CurlFactory;
++use Zipkin\Reporters\Http as HttpReporter;
++
++class TracerFactory
++{
++    public function __invoke(ContainerInterface $container)
++    {
++        $zipkinConfig = $container->get('config')['zipkin'] ?? [];
++        if (empty($zipkinConfig)) {
++            // If zipkin is not configured then we return an empty tracer.
++            return NoopTracer::create();
++        }
++
++        $endpoint = Endpoint::create($zipkinConfig['serviceName']);
++        $reporter = new HttpReporter(CurlFactory::create(), ["endpoint_url" => $zipkinConfig['reporterURL'] ?? 'http://localhost:9411/api/v2/spans']);
++        $sampler = BinarySampler::createAsAlwaysSample();
++        $tracing = TracingBuilder::create()
++            ->havingLocalEndpoint($endpoint)
++           ->havingSampler($sampler)
++           ->havingReporter($reporter)
++           ->build();
++
++        $zipkinTracer = new Tracer($tracing);
++
++        register_shutdown_function(function () {
++            /* Flush the tracer to the backend */
++            $zipkinTracer = GlobalTracer::get();
++            $zipkinTracer->flush();
++        });
++
++        GlobalTracer::set($zipkinTracer);
++        return $zipkinTracer;
++    }
++}
+-- 
+2.23.0
 ```
 
 ## Discount
 
 ```diff
-commit f6880e4341ba095d98346ae9d593c87b0ed73195
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Mon Mar 18 13:01:23 2019 +0100
+From d646f1892643d65b409397c47b363e4e01b4c38a Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 12 Mar 2020 21:43:52 +0100
+Subject: [PATCH] feat(discount): added tracing
 
-    Addded tracing support to discount service
-
-    The discount service supports tracing via OpenTracing and Jaeger.
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/package.json |  8 ++++++++
+ discount/server.js    | 26 ++++++++++++++++++--------
+ discount/tracer.js    | 42 ++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 68 insertions(+), 8 deletions(-)
+ create mode 100644 discount/tracer.js
 
 diff --git a/discount/package.json b/discount/package.json
-index 1640ae1..b019353 100644
+index 1640ae1..fff748e 100644
 --- a/discount/package.json
 +++ b/discount/package.json
-@@ -12,6 +12,8 @@
+@@ -10,6 +10,14 @@
+   "author": "",
+   "license": "ISC",
    "dependencies": {
++    "@opentelemetry/api": "^0.5.0",
++    "@opentelemetry/exporter-jaeger": "^0.5.0",
++    "@opentelemetry/node": "^0.5.0",
++    "@opentelemetry/plugin-http": "^0.5.0",
++    "@opentelemetry/plugin-dns": "^0.5.0",
++    "@opentelemetry/plugin-mongodb": "^0.5.0",
++    "@opentelemetry/tracing": "^0.5.0",
++    "@opentelemetry/plugin-express": "^0.5.0",
      "express": "^4.16.4",
      "express-pino-logger": "^4.0.0",
--    "mongodb": "^3.1.13"
-+    "jaeger-client": "^3.14.4",
-+    "mongodb": "^3.1.13",
-+    "opentracing": "^0.14.3"
-   }
- }
+     "mongodb": "^3.1.13"
 diff --git a/discount/server.js b/discount/server.js
-index 50a32a9..b252923 100644
+index 50a32a9..78b89e1 100644
 --- a/discount/server.js
 +++ b/discount/server.js
-@@ -2,10 +2,13 @@ var express = require("express");
+@@ -1,20 +1,26 @@
+-var express = require("express");
++'use strict';
++
++const url = process.env.DISCOUNT_MONGODB_URL || 'mongodb://discountdb:27017';
++const jaegerHost = process.env.JAEGER_HOST || 'jaeger';
 
++const logger = require('pino')()
++const tracer = require('./tracer')('discount', jaegerHost, logger);
++
++var express = require("express");
  var app = express();
 
-+var url = require('url');
-+
-+var opentracing = require("opentracing");
-+var initJaegerTracer = require("jaeger-client").initTracer;
  const MongoClient = require('mongodb').MongoClient;
 -const url = 'mongodb://discountdb:27017';
  const dbName = 'shopmany';
--const client = new MongoClient(url, { useNewUrlParser: true });
-+const client = new MongoClient('mongodb://discountdb:27017', { useNewUrlParser: true });
- app.use(errorHandler)
+ const client = new MongoClient(url, { useNewUrlParser: true });
+-app.use(errorHandler)
 
- const logger = require('pino')()
-@@ -14,6 +17,39 @@ const expressPino = require('express-pino-logger')({
+-const logger = require('pino')()
+ const expressPino = require('express-pino-logger')({
+   logger: logger.child({"service": "httpd"})
  })
++
++//app.use(errorHandler)
  app.use(expressPino)
 
-+function initTracer(serviceName) {
-+  var config = {
-+    serviceName: serviceName,
-+    sampler: {
-+      type: "const",
-+      param: 1,
-+    },
-+    reporter: {
-+      agentHost: "jaeger-workshop",
-+      logSpans: true,
-+    },
-+  };
-+  var options = {
-+    logger: {
-+      info: function logInfo(msg) {
-+        logger.info(msg, {
-+          "service": "tracer"
-+        })
-+      },
-+      error: function logError(msg) {
-+        logger.error(msg, {
-+          "service": "tracer"
-+        })
-+      },
-+    },
-+  };
-+  return initJaegerTracer(config, options);
-+}
-+
-+const tracer = initTracer("discount");
-+opentracing.initGlobalTracer(tracer);
-+app.use(expressMiddleware({tracer: tracer}));
-+
- app.get("/health", function(req, res, next) {
+-app.get("/health", function(req, res, next) {
++app.get("/health", function(req, res) {
    var resbody = {
      "status": "healthy",
-@@ -41,11 +77,18 @@ app.get("/health", function(req, res, next) {
+     checks: [],
+@@ -40,7 +46,11 @@ app.get("/health", function(req, res, next) {
+
  app.get("/discount", function(req, res, next) {
    client.connect(function(err) {
-     db = client.db(dbName);
-+    const wireCtx = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, req.headers);
-+    const pathname = url.parse(req.url).pathname;
-+    const span = tracer.startSpan("mongodb", {childOf: wireCtx});
-+    span.setTag("query", "db.items.find()");
+-    db = client.db(dbName);
++    if (err != null) {
++      req.log.error(err.toString());
++      return next(err)
++    }
++    let db = client.db(dbName);
      db.collection('discount').find({}).toArray(function(err, discounts) {
        if (err != null) {
          req.log.error(err.toString());
-+        span.setTag("error", true);
-+        span.finish();
-         return next(err)
-       }
-+      span.finish();
-       var goodDiscount = null
-       discounts.forEach(function (s) {
-         if (s.itemID+"" == req.query.itemid) {
-@@ -83,3 +126,40 @@ function errorHandler(err, req, res, next) {
- app.listen(3000, () => {
-   logger.info("Server running on port 3000");
+@@ -63,12 +73,12 @@ app.get("/discount", function(req, res, next) {
+   });
  });
+
+-app.use(function(req, res, next) {
++app.use(function(req, res) {
+   req.log.warn("route not found");
+   return res.status(404).json({error: "route not found"});
+ });
+
+-function errorHandler(err, req, res, next) {
++function errorHandler(err, req, res) {
+   req.log.error(err.toString(), {
+     error_status: err.status
+   });
+diff --git a/discount/tracer.js b/discount/tracer.js
+new file mode 100644
+index 0000000..a39d0c7
+--- /dev/null
++++ b/discount/tracer.js
+@@ -0,0 +1,42 @@
++'use strict';
 +
-+function expressMiddleware(options = {}) {
-+  const tracer = options.tracer || opentracing.globalTracer();
++const opentelemetry = require('@opentelemetry/api');
++const { NodeTracerProvider } = require('@opentelemetry/node');
++const { SimpleSpanProcessor } = require('@opentelemetry/tracing');
++const { JaegerExporter } = require('@opentelemetry/exporter-jaeger');
++const { B3Propagator } = require('@opentelemetry/core');
 +
-+  return (req, res, next) => {
-+    const wireCtx = tracer.extract(opentracing.FORMAT_HTTP_HEADERS, req.headers);
-+    const pathname = url.parse(req.url).pathname;
-+    const span = tracer.startSpan(pathname, {childOf: wireCtx});
-+    span.logEvent("request_received");
++module.exports = (serviceName, jaegerHost, logger) => {
++  const provider = new NodeTracerProvider({
++    plugins: {
++      dns: {
++        enabled: true,
++        path: '@opentelemetry/plugin-dns',
++      },
++      mongodb: {
++        enabled: true,
++        path: '@opentelemetry/plugin-mongodb',
++      },
++      http: {
++        enabled: true,
++        path: '@opentelemetry/plugin-http',
++      },
++      express: {
++        enabled: true,
++        path: '@opentelemetry/plugin-express',
++      },
++    }
++  });
 +
-+    span.setTag("http.method", req.method);
-+    span.setTag("span.kind", "server");
-+    span.setTag("http.url", req.url);
++  let exporter = new JaegerExporter({
++    logger: logger,
++    serviceName: serviceName,
++    host: jaegerHost
++  });
 +
-+    const responseHeaders = {};
-+    tracer.inject(span, opentracing.FORMAT_TEXT_MAP, responseHeaders);
-+    Object.keys(responseHeaders).forEach(key => res.setHeader(key, responseHeaders[key]));
-+
-+    Object.assign(req, {span});
-+
-+    const finishSpan = () => {
-+      span.logEvent("request_finished");
-+      const opName = (req.route && req.route.path) || pathname;
-+      span.setOperationName(opName);
-+      span.setTag("http.status_code", res.statusCode);
-+      if (res.statusCode >= 500) {
-+        span.setTag("error", true);
-+        span.setTag("sampling.priority", 1);
-+      }
-+      span.finish();
-+    };
-+    res.on('close', finishSpan);
-+    res.on('finish', finishSpan);
-+
-+    next();
-+  };
-+}
++  provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
++  provider.register({
++    propagator: new B3Propagator(),
++  });
++  return opentelemetry.trace.getTracer("discount");
++};
+--
+2.23.0
 ```
 
 ## Pay
 
 ```
-commit 98b3c57ee9914eec77f87dffd6d49cbadfe9f4a5
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Sat Mar 23 20:05:48 2019 +0100
+From 7917579a9541b1ef207e950f697165e622b55fee Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sun, 15 Mar 2020 14:34:41 +0100
+Subject: [PATCH] fix(pay): Trace with B3 and opentelemetry
 
-    Added tracing support to pay svc
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ pay/.gitignore                               |  10 ++
+ pay/build.gradle                             |   6 +
+ pay/gradlew                                  | 172 -------------------
+ pay/src/main/java/pay/AppConfig.java         |   1 +
+ pay/src/main/java/pay/Application.java       |  22 +++
+ pay/src/main/java/pay/TracerInterceptor.java |  63 +++++++
+ 6 files changed, 102 insertions(+), 172 deletions(-)
+ create mode 100644 pay/.gitignore
+ delete mode 100755 pay/gradlew
+ create mode 100644 pay/src/main/java/pay/TracerInterceptor.java
 
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
-
-diff --git a/docker-compose.yaml b/docker-compose.yaml
-index f56946c..859f052 100644
---- a/docker-compose.yaml
-+++ b/docker-compose.yaml
-@@ -70,6 +70,8 @@ services:
-       - shopmany
-     depends_on:
-       - paydb
-+    environment:
-+      JAEGER_ENDPOINT: "http://jaeger-workshop:14268/api/traces"
-
-   paydb:
-     image: mysql:5.7.25
+diff --git a/pay/.gitignore b/pay/.gitignore
+new file mode 100644
+index 0000000..70463c2
+--- /dev/null
++++ b/pay/.gitignore
+@@ -0,0 +1,10 @@
++.gradle
++build
++.settings
++.idea
++.project
++gradle/wrapper/gradle-wrapper.jar
++gradle/wrapper/gradle-wrapper.properties
++gradlew
++gradlew.bat
++
 diff --git a/pay/build.gradle b/pay/build.gradle
-index 50bb905..0fe3642 100644
+index 50bb905..422f0ed 100644
 --- a/pay/build.gradle
 +++ b/pay/build.gradle
-@@ -32,6 +32,7 @@ dependencies {
-     compile("com.fasterxml.jackson.core:jackson-databind")
+@@ -33,6 +33,12 @@ dependencies {
      compile("org.springframework.boot:spring-boot-starter-web"){ exclude group: 'org.springframework.boot', module: 'spring-boot-starter-logging'}
      compile('org.springframework.boot:spring-boot-starter-log4j2')
-+    compile('io.jaegertracing:jaeger-client:0.32.0')
      testCompile('org.springframework.boot:spring-boot-starter-test')
++    compile('io.opentelemetry:opentelemetry-api:0.2.4')
++    compile('io.opentelemetry:opentelemetry-sdk:0.2.4')
++    compile('io.opentelemetry:opentelemetry-exporters-jaeger:0.2.4')
++    compile('io.opentelemetry:opentelemetry-exporters-logging:0.2.4')
++    compile('io.grpc:grpc-protobuf:1.24.0')
++    compile('io.grpc:grpc-netty-shaded:1.24.0')
  }
 
+
+diff --git a/pay/gradlew b/pay/gradlew
+deleted file mode 100755
+index cccdd3d..0000000
+--- a/pay/gradlew
++++ /dev/null
+@@ -1,172 +0,0 @@
+-#!/usr/bin/env sh
+-
+-##############################################################################
+-##
+-##  Gradle start up script for UN*X
+-##
+-##############################################################################
+-
+-# Attempt to set APP_HOME
+-# Resolve links: $0 may be a link
+-PRG="$0"
+-# Need this for relative symlinks.
+-while [ -h "$PRG" ] ; do
+-    ls=`ls -ld "$PRG"`
+-    link=`expr "$ls" : '.*-> \(.*\)$'`
+-    if expr "$link" : '/.*' > /dev/null; then
+-        PRG="$link"
+-    else
+-        PRG=`dirname "$PRG"`"/$link"
+-    fi
+-done
+-SAVED="`pwd`"
+-cd "`dirname \"$PRG\"`/" >/dev/null
+-APP_HOME="`pwd -P`"
+-cd "$SAVED" >/dev/null
+-
+-APP_NAME="Gradle"
+-APP_BASE_NAME=`basename "$0"`
+-
+-# Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
+-DEFAULT_JVM_OPTS=""
+-
+-# Use the maximum available, or set MAX_FD != -1 to use that value.
+-MAX_FD="maximum"
+-
+-warn () {
+-    echo "$*"
+-}
+-
+-die () {
+-    echo
+-    echo "$*"
+-    echo
+-    exit 1
+-}
+-
+-# OS specific support (must be 'true' or 'false').
+-cygwin=false
+-msys=false
+-darwin=false
+-nonstop=false
+-case "`uname`" in
+-  CYGWIN* )
+-    cygwin=true
+-    ;;
+-  Darwin* )
+-    darwin=true
+-    ;;
+-  MINGW* )
+-    msys=true
+-    ;;
+-  NONSTOP* )
+-    nonstop=true
+-    ;;
+-esac
+-
+-CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+-
+-# Determine the Java command to use to start the JVM.
+-if [ -n "$JAVA_HOME" ] ; then
+-    if [ -x "$JAVA_HOME/jre/sh/java" ] ; then
+-        # IBM's JDK on AIX uses strange locations for the executables
+-        JAVACMD="$JAVA_HOME/jre/sh/java"
+-    else
+-        JAVACMD="$JAVA_HOME/bin/java"
+-    fi
+-    if [ ! -x "$JAVACMD" ] ; then
+-        die "ERROR: JAVA_HOME is set to an invalid directory: $JAVA_HOME
+-
+-Please set the JAVA_HOME variable in your environment to match the
+-location of your Java installation."
+-    fi
+-else
+-    JAVACMD="java"
+-    which java >/dev/null 2>&1 || die "ERROR: JAVA_HOME is not set and no 'java' command could be found in your PATH.
+-
+-Please set the JAVA_HOME variable in your environment to match the
+-location of your Java installation."
+-fi
+-
+-# Increase the maximum file descriptors if we can.
+-if [ "$cygwin" = "false" -a "$darwin" = "false" -a "$nonstop" = "false" ] ; then
+-    MAX_FD_LIMIT=`ulimit -H -n`
+-    if [ $? -eq 0 ] ; then
+-        if [ "$MAX_FD" = "maximum" -o "$MAX_FD" = "max" ] ; then
+-            MAX_FD="$MAX_FD_LIMIT"
+-        fi
+-        ulimit -n $MAX_FD
+-        if [ $? -ne 0 ] ; then
+-            warn "Could not set maximum file descriptor limit: $MAX_FD"
+-        fi
+-    else
+-        warn "Could not query maximum file descriptor limit: $MAX_FD_LIMIT"
+-    fi
+-fi
+-
+-# For Darwin, add options to specify how the application appears in the dock
+-if $darwin; then
+-    GRADLE_OPTS="$GRADLE_OPTS \"-Xdock:name=$APP_NAME\" \"-Xdock:icon=$APP_HOME/media/gradle.icns\""
+-fi
+-
+-# For Cygwin, switch paths to Windows format before running java
+-if $cygwin ; then
+-    APP_HOME=`cygpath --path --mixed "$APP_HOME"`
+-    CLASSPATH=`cygpath --path --mixed "$CLASSPATH"`
+-    JAVACMD=`cygpath --unix "$JAVACMD"`
+-
+-    # We build the pattern for arguments to be converted via cygpath
+-    ROOTDIRSRAW=`find -L / -maxdepth 1 -mindepth 1 -type d 2>/dev/null`
+-    SEP=""
+-    for dir in $ROOTDIRSRAW ; do
+-        ROOTDIRS="$ROOTDIRS$SEP$dir"
+-        SEP="|"
+-    done
+-    OURCYGPATTERN="(^($ROOTDIRS))"
+-    # Add a user-defined pattern to the cygpath arguments
+-    if [ "$GRADLE_CYGPATTERN" != "" ] ; then
+-        OURCYGPATTERN="$OURCYGPATTERN|($GRADLE_CYGPATTERN)"
+-    fi
+-    # Now convert the arguments - kludge to limit ourselves to /bin/sh
+-    i=0
+-    for arg in "$@" ; do
+-        CHECK=`echo "$arg"|egrep -c "$OURCYGPATTERN" -`
+-        CHECK2=`echo "$arg"|egrep -c "^-"`                                 ### Determine if an option
+-
+-        if [ $CHECK -ne 0 ] && [ $CHECK2 -eq 0 ] ; then                    ### Added a condition
+-            eval `echo args$i`=`cygpath --path --ignore --mixed "$arg"`
+-        else
+-            eval `echo args$i`="\"$arg\""
+-        fi
+-        i=$((i+1))
+-    done
+-    case $i in
+-        (0) set -- ;;
+-        (1) set -- "$args0" ;;
+-        (2) set -- "$args0" "$args1" ;;
+-        (3) set -- "$args0" "$args1" "$args2" ;;
+-        (4) set -- "$args0" "$args1" "$args2" "$args3" ;;
+-        (5) set -- "$args0" "$args1" "$args2" "$args3" "$args4" ;;
+-        (6) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" ;;
+-        (7) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" ;;
+-        (8) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" ;;
+-        (9) set -- "$args0" "$args1" "$args2" "$args3" "$args4" "$args5" "$args6" "$args7" "$args8" ;;
+-    esac
+-fi
+-
+-# Escape application args
+-save () {
+-    for i do printf %s\\n "$i" | sed "s/'/'\\\\''/g;1s/^/'/;\$s/\$/' \\\\/" ; done
+-    echo " "
+-}
+-APP_ARGS=$(save "$@")
+-
+-# Collect all arguments for the java command, following the shell quoting and substitution rules
+-eval set -- $DEFAULT_JVM_OPTS $JAVA_OPTS $GRADLE_OPTS "\"-Dorg.gradle.appname=$APP_BASE_NAME\"" -classpath "\"$CLASSPATH\"" org.gradle.wrapper.GradleWrapperMain "$APP_ARGS"
+-
+-# by default we should be in the correct project dir, but when run from Finder on Mac, the cwd is wrong
+-if [ "$(uname)" = "Darwin" ] && [ "$HOME" = "$PWD" ]; then
+-  cd "$(dirname "$0")"
+-fi
+-
+-exec "$JAVACMD" "$@"
 diff --git a/pay/src/main/java/pay/AppConfig.java b/pay/src/main/java/pay/AppConfig.java
-index bb788cb..78662b9 100644
+index bb788cb..d6e780a 100644
 --- a/pay/src/main/java/pay/AppConfig.java
 +++ b/pay/src/main/java/pay/AppConfig.java
-@@ -9,6 +9,7 @@ public class AppConfig extends WebMvcConfigurerAdapter  {
-
+@@ -10,5 +10,6 @@ public class AppConfig extends WebMvcConfigurerAdapter  {
      @Override
      public void addInterceptors(InterceptorRegistry registry) {
-+       registry.addInterceptor(new TracingInterceptor());
         registry.addInterceptor(new LoggerInterceptor());
++       registry.addInterceptor(new TracerInterceptor());
      }
  }
-diff --git a/pay/src/main/java/pay/TracingInterceptor.java b/pay/src/main/java/pay/TracingInterceptor.java
+diff --git a/pay/src/main/java/pay/Application.java b/pay/src/main/java/pay/Application.java
+index 1d8d39d..201fd73 100644
+--- a/pay/src/main/java/pay/Application.java
++++ b/pay/src/main/java/pay/Application.java
+@@ -1,5 +1,11 @@
+ package pay;
+
++import io.grpc.ManagedChannel;
++import io.grpc.ManagedChannelBuilder;
++import io.opentelemetry.exporters.jaeger.JaegerGrpcSpanExporter;
++import io.opentelemetry.exporters.logging.LoggingSpanExporter;
++import io.opentelemetry.sdk.OpenTelemetrySdk;
++import io.opentelemetry.sdk.trace.export.SimpleSpansProcessor;
+ import org.springframework.boot.SpringApplication;
+ import org.springframework.boot.autoconfigure.SpringBootApplication;
+ import org.springframework.http.ResponseEntity;
+@@ -54,7 +60,23 @@ public class Application {
+     }
+
+     public static void main(String[] args) {
++        // Create a channel towards Jaeger end point
++        ManagedChannel jaegerChannel = ManagedChannelBuilder.forAddress("jaeger", 14250).usePlaintext().build();
++        // Export traces to Jaeger
++
++        JaegerGrpcSpanExporter jaegerExporter = JaegerGrpcSpanExporter.newBuilder()
++                .setServiceName("pay")
++                .setChannel(jaegerChannel)
++                .setDeadlineMs(30000)
++                .build();
++        // Export also to the console
++        LoggingSpanExporter loggingExporter = new LoggingSpanExporter();
++        OpenTelemetrySdk.getTracerProvider().addSpanProcessor(SimpleSpansProcessor.newBuilder(loggingExporter).build());
++        // Set to process the spans by the Jaeger Exporter
++        OpenTelemetrySdk.getTracerProvider()
++                .addSpanProcessor(SimpleSpansProcessor.newBuilder(jaegerExporter).build());
+         SpringApplication.run(Application.class, args);
+     }
+
+ }
++
+diff --git a/pay/src/main/java/pay/TracerInterceptor.java b/pay/src/main/java/pay/TracerInterceptor.java
 new file mode 100644
-index 0000000..b1c0118
+index 0000000..a37a508
 --- /dev/null
-+++ b/pay/src/main/java/pay/TracingInterceptor.java
-@@ -0,0 +1,78 @@
++++ b/pay/src/main/java/pay/TracerInterceptor.java
+@@ -0,0 +1,63 @@
 +package pay;
 +
++import com.sun.net.httpserver.HttpExchange;
++import io.opentelemetry.OpenTelemetry;
++import io.opentelemetry.context.propagation.HttpTextFormat;
++import io.opentelemetry.trace.Span;
++import io.opentelemetry.trace.SpanContext;
++import io.opentelemetry.trace.Tracer;
++import io.opentelemetry.trace.propagation.B3Propagator;
 +import org.springframework.stereotype.Component;
 +import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
++
 +import javax.servlet.http.HttpServletRequest;
 +import javax.servlet.http.HttpServletResponse;
-+import io.opentracing.Span;
-+import io.opentracing.SpanContext;
-+import io.opentracing.Tracer;
-+import io.opentracing.propagation.TextMapExtractAdapter;
-+import io.opentracing.propagation.Format;
-+import io.jaegertracing.Configuration;
-+import io.jaegertracing.Configuration.ReporterConfiguration;
-+import io.jaegertracing.Configuration.SamplerConfiguration;
-+import io.jaegertracing.internal.JaegerTracer;
-+import java.util.Enumeration;
-+import java.util.HashMap;
-+import java.util.Map;
++
++import java.io.IOException;
++import java.net.URL;
 +
 +@Component
-+public class TracingInterceptor
-+  extends HandlerInterceptorAdapter {
++public class TracerInterceptor
++        extends HandlerInterceptorAdapter {
++    // OTel API
++    private Tracer tracer =
++            OpenTelemetry.getTracerProvider().get("io.opentelemetry.pay.JaegerExample");
 +
-+    public static JaegerTracer initTracer(String service) {
-+        SamplerConfiguration samplerConfig = SamplerConfiguration.fromEnv().withType("const").withParam(1);
-+        ReporterConfiguration reporterConfig = ReporterConfiguration.fromEnv().withLogSpans(true);
-+        Configuration config = new Configuration(service).withSampler(samplerConfig).withReporter(reporterConfig);
-+    return config.getTracer();
-+}
++    // false -> we expect multi header
++    B3Propagator b3Propagator = new B3Propagator(false);
++
++    B3Propagator.Getter<HttpServletRequest> getter = new B3Propagator.Getter<HttpServletRequest>() {
++        @javax.annotation.Nullable
++        @Override
++        public String get(HttpServletRequest carrier, String key) {
++            return carrier.getHeader(key);
++        }
++    };
++    private Span span;
 +
 +    @Override
 +    public boolean preHandle(
-+      HttpServletRequest request,
-+      HttpServletResponse response,
-+      Object handler) {
-+        Tracer tracer = initTracer("pay");
-+
-+        Map<String, String> headers = new HashMap<String, String>();
-+        Enumeration<String> headerNames = request.getHeaderNames();
-+        while (headerNames.hasMoreElements()) {
-+            String key = (String) headerNames.nextElement();
-+            String value = request.getHeader(key);
-+            headers.put(key, value);
++            HttpServletRequest request,
++            HttpServletResponse response,
++            Object handler) throws IOException {
++        URL url = new URL(request.getRequestURL().toString());
++        SpanContext remoteCtx = b3Propagator.extract(request, getter);
++        Span.Builder spanBuilder = tracer.spanBuilder(String.format("[%s] %d:%s", request.getMethod(), url.getPort(), url.getPath())).setSpanKind(Span.Kind.SERVER);
++        if(remoteCtx != null){
++            spanBuilder.setParent(remoteCtx);
 +        }
-+
-+        String operationName = request.getMethod()+" "+request.getRequestURL().toString();
-+        Tracer.SpanBuilder spanBuilder = tracer.buildSpan(operationName);
-+        SpanContext parentSpan = tracer.extract(Format.Builtin.HTTP_HEADERS, new TextMapExtractAdapter(headers));
-+        if (parentSpan != null) {
-+            spanBuilder = tracer.buildSpan(operationName).asChildOf(parentSpan);
-+        }
-+
-+        Span span = spanBuilder.start();
-+
-+        span.setTag("path", request.getRequestURL().toString());
-+        span.setTag("method", request.getMethod());
-+        span.setTag("local_addr", request.getLocalAddr());
-+        span.setTag("content_type", request.getContentType());
-+        request.setAttribute("span", span);
++        span = spanBuilder.startSpan();
++        span.setAttribute("http.method", request.getMethod());
++        span.setAttribute("http.url", url.toString());
 +        return true;
 +    }
-+
-+
 +    @Override
 +    public void afterCompletion(
-+      HttpServletRequest request,
-+      HttpServletResponse response,
-+      Object handler,
-+      Exception ex) {
-+        Span span = (Span)request.getAttribute("span");
-+        span.setTag("response_status",response.getStatus());
-+        if (ex != null) {
-+            span.setTag("error", true);
-+            span.setTag("error_message", ex.getMessage());
-+        }
-+        span.finish();
++            HttpServletRequest request,
++            HttpServletResponse response,
++            Object handler,
++            Exception ex) {
++        span.setAttribute("http.status_code", response.getStatus());
++        span.end();
 +    }
 +}
+--
+2.23.0
 ```
 
 ## Frontend
 
 ```diff
-commit 62641a2f4e39ed5d4c07567278dc69427a9db3cf
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Fri Mar 15 14:35:23 2019 +0100
+From 297539e0b76235ad8ef39c5e8e0f4c1080b12cf8 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Wed, 11 Mar 2020 21:48:37 +0100
+Subject: [PATCH] feat(frontend): Instrument http handlers
 
-    Added tracing to frontend
+OpenTelemetry is is made of exporters, the easier to use is the stdout
+one. It prints JSON to the process stdout.
 
-    Via OpenTracing and Jaeger we are not able to trace requests coming to
-    the http server.
+Stdout is a good exporter but not the one you should use in production.
+There are a lot of open source tracer around: Zipkin, Jaeger, Honeycomb,
+AWS X-Ray, Google StackDriver. I tend to use Jaeger because it is in Go
+and it is open source.
 
-    We also configured the http client to pass the SpanContext, in this way
-    other services can create child spans.
+This commit adds the flag `--tracer` by default it is set to stdout, but
+if you use `--tracer jaeger` the traces will be send to Jaeger. You can
+override the Jaeger URl with `--tracer-jaeger-address`
 
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ docker-compose.yaml          |  2 +-
+ frontend/config/config.go    |  8 +++---
+ frontend/handler/getitems.go | 11 ++++++++
+ frontend/handler/health.go   |  9 +++++--
+ frontend/handler/pay.go      |  4 +++
+ frontend/main.go             | 49 +++++++++++++++++++++++++++++++++---
+ 6 files changed, 74 insertions(+), 9 deletions(-)
 
 diff --git a/docker-compose.yaml b/docker-compose.yaml
-index dc0a720..f56946c 100644
+index bb9b123..6474bea 100644
 --- a/docker-compose.yaml
 +++ b/docker-compose.yaml
-@@ -96,6 +96,10 @@ services:
+@@ -90,7 +90,7 @@ services:
+   # frontend is the ui of the project
+   frontend:
+     image: golang:1.14.0-stretch
+-    command: ["go", "run", "-mod", "vendor", "./main.go"]
++    command: ["go", "run", "-mod", "vendor", "./main.go", "--tracer", "jaeger", "--tracer-jaeger-address", "http://jaeger:14268/api/traces"]
+     ports:
+       - '3000:3000'
      volumes:
-       - "./frontend:/opt/app"
-     working_dir: "/opt/app"
-+    environment:
-+      JAEGER_SERVICE_NAME: frontend
-+      JAEGER_ENDPOINT: "http://jaeger-workshop:14268/api/traces"
-+      JAEGER_REPORTER_FLUSH_INTERVAL: 500ms
-     depends_on:
-       - item
-       - pay
-diff --git a/frontend/go.mod b/frontend/go.mod
-index d86b3cb..b936b7f 100644
---- a/frontend/go.mod
-+++ b/frontend/go.mod
-@@ -3,7 +3,18 @@ module github.com/gianarb/shopmany/frontend
- go 1.12
+diff --git a/frontend/config/config.go b/frontend/config/config.go
+index 5524a5b..55bd702 100644
+--- a/frontend/config/config.go
++++ b/frontend/config/config.go
+@@ -1,7 +1,9 @@
+ package config
 
- require (
-+	github.com/apache/thrift v0.12.0 // indirect
-+	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd // indirect
-+	github.com/docker/docker v1.13.1 // indirect
-+	github.com/docker/go-connections v0.4.0 // indirect
-+	github.com/docker/go-units v0.3.3 // indirect
- 	github.com/jessevdk/go-flags v1.4.0
-+	github.com/moby/moby v1.13.1 // indirect
-+	github.com/opentracing-contrib/go-stdlib v0.0.0-20190205184154-464eb271c715
-+	github.com/opentracing/opentracing-go v1.0.2
-+	github.com/uber/jaeger-client-go v2.15.0+incompatible
-+	github.com/uber/jaeger-lib v1.5.0
-+	go.opencensus.io v0.19.1
- 	go.uber.org/atomic v1.3.2 // indirect
- 	go.uber.org/multierr v1.1.0 // indirect
- 	go.uber.org/zap v1.9.1
-diff --git a/frontend/go.sum b/frontend/go.sum
-index 54a3d32..18cbd18 100644
+ type Config struct {
+-	ItemHost     string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
+-	DiscountHost string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
+-	PayHost      string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	ItemHost      string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
++	DiscountHost  string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
++	PayHost       string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	Tracer        string `long:"tracer" description:"The place where traces get shiped to. By default it is stdout. Jaeger is also supported" default:"stdout"`
++	JaegerAddress string `long:"tracer-jaeger-address" description:"If Jaeger is set as tracer output this is the way you ovverride where to ship data to" default:"http://localhost:14268/api/traces"`
+ }
+diff --git a/frontend/handler/getitems.go b/frontend/handler/getitems.go
+index 54a3d32..887b899 100644
 --- a/frontend/handler/getitems.go
 +++ b/frontend/handler/getitems.go
-@@ -9,6 +9,7 @@ import (
+@@ -9,6 +9,9 @@ import (
  	"strconv"
 
  	"github.com/gianarb/shopmany/frontend/config"
-+	opentracing "github.com/opentracing/opentracing-go"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/api/trace"
++	"go.opentelemetry.io/otel/plugin/httptrace"
  	"go.uber.org/zap"
  )
 
-@@ -37,6 +38,13 @@ func getDiscountPerItem(ctx context.Context, hclient *http.Client, itemID int, d
+@@ -32,14 +35,20 @@ type DiscountResponse struct {
+ 	} `json:"discount"`
+ }
+
++var props = propagation.New(propagation.WithInjectors(trace.B3{}))
++
+ func getDiscountPerItem(ctx context.Context, hclient *http.Client, itemID int, discountHost string) (int, error) {
+ 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/discount", discountHost), nil)
  	if err != nil {
  		return 0, err
  	}
-+	req.WithContext(ctx)
-+	if span := opentracing.SpanFromContext(ctx); span != nil {
-+		opentracing.GlobalTracer().Inject(
-+			span.Context(),
-+			opentracing.HTTPHeaders,
-+			opentracing.HTTPHeadersCarrier(req.Header))
-+	}
++
  	q := req.URL.Query()
  	q.Add("itemid", strconv.Itoa(itemID))
  	req.URL.RawQuery = q.Encode()
-@@ -88,6 +96,14 @@ func (h *getItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
++
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
+ 	if err != nil {
+ 		return 0, err
+@@ -88,6 +97,8 @@ func (h *getItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  		http.Error(w, err.Error(), 500)
  		return
  	}
-+	req.WithContext(ctx)
-+	if span := opentracing.SpanFromContext(r.Context()); span != nil {
-+		opentracing.GlobalTracer().Inject(
-+			span.Context(),
-+			opentracing.HTTPHeaders,
-+			opentracing.HTTPHeadersCarrier(req.Header))
-+	}
-+
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
  	resp, err := h.hclient.Do(req)
  	if err != nil {
  		h.logger.Error(err.Error())
 diff --git a/frontend/handler/health.go b/frontend/handler/health.go
-index fa9e52f..7720a28 100644
+index fa9e52f..39fd873 100644
 --- a/frontend/handler/health.go
 +++ b/frontend/handler/health.go
-@@ -1,12 +1,14 @@
+@@ -1,12 +1,15 @@
  package handler
 
  import (
@@ -700,148 +857,381 @@ index fa9e52f..7720a28 100644
  	"net/http"
 
  	"github.com/gianarb/shopmany/frontend/config"
-+	opentracing "github.com/opentracing/opentracing-go"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
  	"go.uber.org/zap"
  )
 
-@@ -50,7 +52,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+@@ -50,7 +53,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  	}
  	w.Header().Add("Content-Type", "application/json")
 
 -	itemCheck := checkItem(h.config.ItemHost, h.hclient)
-+	itemCheck := checkItem(r.Context(), h.hclient, h.config.ItemHost)
++	itemCheck := checkItem(r.Context(), h.config.ItemHost, h.hclient)
  	if itemCheck.Status == healthy {
  		b.Status = healthy
  	}
-@@ -68,14 +70,23 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+@@ -68,13 +71,15 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  	fmt.Fprintf(w, string(body))
  }
 
 -func checkItem(host string, hclient *http.Client) check {
-+func checkItem(ctx context.Context, httpClient *http.Client, host string) check {
++func checkItem(ctx context.Context, host string, hclient *http.Client) check {
  	c := check{
  		Name:   "item",
  		Error:  "",
  		Status: unhealthy,
  	}
--	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
--	resp, err := hclient.Do(req)
-+	r, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
-+	r = r.WithContext(ctx)
-+
-+	if span := opentracing.SpanFromContext(ctx); span != nil {
-+		opentracing.GlobalTracer().Inject(
-+			span.Context(),
-+			opentracing.HTTPHeaders,
-+			opentracing.HTTPHeadersCarrier(r.Header))
-+	}
-+
-+	resp, err := httpClient.Do(r)
+ 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
  	if err != nil {
  		c.Error = err.Error()
- 		return c
 diff --git a/frontend/handler/pay.go b/frontend/handler/pay.go
-index f3e5434..f87ad89 100644
+index f3e5434..49d63c1 100644
 --- a/frontend/handler/pay.go
 +++ b/frontend/handler/pay.go
-@@ -5,6 +5,7 @@ import (
+@@ -5,6 +5,8 @@ import (
  	"net/http"
 
  	"github.com/gianarb/shopmany/frontend/config"
-+	opentracing "github.com/opentracing/opentracing-go"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
  	"go.uber.org/zap"
  )
 
-@@ -38,6 +39,13 @@ func (h *payHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+@@ -38,6 +40,8 @@ func (h *payHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  		http.Error(w, err.Error(), 500)
  		return
  	}
-+	req.WithContext(r.Context())
-+	if span := opentracing.SpanFromContext(r.Context()); span != nil {
-+		opentracing.GlobalTracer().Inject(
-+			span.Context(),
-+			opentracing.HTTPHeaders,
-+			opentracing.HTTPHeadersCarrier(req.Header))
-+	}
++	ctx, req := httptrace.W3C(r.Context(), req)
++	propagation.InjectHTTP(ctx, props, req.Header)
  	req.Header.Add("Content-Type", "application/json")
  	resp, err := h.hclient.Do(req)
  	if err != nil {
 diff --git a/frontend/main.go b/frontend/main.go
-index 35a084c..a310355 100644
+index 35a084c..5f5e157 100644
 --- a/frontend/main.go
 +++ b/frontend/main.go
-@@ -5,21 +5,44 @@ import (
- 	"log"
- 	"net/http"
-
-+	"github.com/opentracing-contrib/go-stdlib/nethttp"
-+	opentracing "github.com/opentracing/opentracing-go"
-+	jaeger "github.com/uber/jaeger-client-go"
-+	jconfig "github.com/uber/jaeger-client-go/config"
-+
+@@ -8,6 +8,11 @@ import (
  	"github.com/gianarb/shopmany/frontend/config"
  	"github.com/gianarb/shopmany/frontend/handler"
  	flags "github.com/jessevdk/go-flags"
-+	jaegerZap "github.com/uber/jaeger-client-go/log/zap"
-+	"go.opencensus.io/plugin/ochttp"
++	"go.opentelemetry.io/otel/api/global"
++	"go.opentelemetry.io/otel/exporters/trace/jaeger"
++	"go.opentelemetry.io/otel/exporters/trace/stdout"
++	"go.opentelemetry.io/otel/plugin/othttp"
++	sdktrace "go.opentelemetry.io/otel/sdk/trace"
  	"go.uber.org/zap"
  )
 
- func main() {
- 	logger, _ := zap.NewProduction()
- 	defer logger.Sync()
-+
- 	config := config.Config{}
- 	_, err := flags.Parse(&config)
-+	if err != nil {
-+		logger.Fatal(err.Error())
-+	}
-
-+	cfg, err := jconfig.FromEnv()
-+	if err != nil {
-+		logger.Fatal(err.Error())
-+	}
-+	cfg.Reporter.LogSpans = true
-+	cfg.Sampler = &jconfig.SamplerConfig{
-+		Type:  "const",
-+		Param: 1,
-+	}
-+	tracer, closer, err := cfg.NewTracer(jconfig.Logger(jaegerZap.NewLogger(logger.With(zap.String("service", "jaeger-go")))))
- 	if err != nil {
--		panic(err)
-+		logger.Fatal(err.Error())
+@@ -21,6 +26,44 @@ func main() {
+ 		panic(err)
  	}
-+	defer closer.Close()
-+	opentracing.SetGlobalTracer(tracer)
 
++	exporter, err := stdout.NewExporter(stdout.Options{PrettyPrint: true})
++	if err != nil {
++		log.Fatal(err)
++	}
++	tp, err := sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++		sdktrace.WithSyncer(exporter))
++	if err != nil {
++		log.Fatal(err)
++	}
++	global.SetTraceProvider(tp)
++
++	if config.Tracer == "jaeger" {
++
++		logger.Info("Used the tracer output jaeger")
++		// Create Jaeger Exporter
++		exporter, err := jaeger.NewExporter(
++			jaeger.WithCollectorEndpoint(config.JaegerAddress),
++			jaeger.WithProcess(jaeger.Process{
++				ServiceName: "frontend",
++			}),
++		)
++		if err != nil {
++			log.Fatal(err)
++		}
++
++		// For demoing purposes, always sample. In a production application, you should
++		// configure this to a trace.ProbabilitySampler set at the desired
++		// probability.
++		tp, err := sdktrace.NewProvider(
++			sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++			sdktrace.WithSyncer(exporter))
++		if err != nil {
++			log.Fatal(err)
++		}
++		global.SetTraceProvider(tp)
++		defer exporter.Flush()
++	}
++
  	fmt.Printf("Item Host: %v\n", config.ItemHost)
  	fmt.Printf("Pay Host: %v\n", config.PayHost)
-@@ -27,7 +50,7 @@ func main() {
+ 	fmt.Printf("Discount Host: %v\n", config.DiscountHost)
+@@ -39,9 +82,9 @@ func main() {
+ 	healthHandler.WithLogger(logger)
 
- 	mux := http.NewServeMux()
-
--	httpClient := &http.Client{}
-+	httpClient := &http.Client{Transport: &ochttp.Transport{}}
- 	fs := http.FileServer(http.Dir("static"))
-
- 	httpdLogger := logger.With(zap.String("service", "httpd"))
-@@ -44,11 +67,16 @@ func main() {
- 	mux.Handle("/health", healthHandler)
+ 	mux.Handle("/", fs)
+-	mux.Handle("/api/items", getItemsHandler)
+-	mux.Handle("/api/pay", payHandler)
+-	mux.Handle("/health", healthHandler)
++	mux.Handle("/api/items", othttp.NewHandler(getItemsHandler, "http.GetItems"))
++	mux.Handle("/api/pay", othttp.NewHandler(payHandler, "http.Pay"))
++	mux.Handle("/health", othttp.NewHandler(healthHandler, "http.health"))
 
  	log.Println("Listening on port 3000...")
--	http.ListenAndServe(":3000", loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux))
-+	http.ListenAndServe(":3000", nethttp.Middleware(tracer, loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux)))
+ 	http.ListenAndServe(":3000", loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux))
+--
+2.23.0
+
+From 297539e0b76235ad8ef39c5e8e0f4c1080b12cf8 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Wed, 11 Mar 2020 21:48:37 +0100
+Subject: [PATCH] feat(frontend): Instrument http handlers
+
+OpenTelemetry is is made of exporters, the easier to use is the stdout
+one. It prints JSON to the process stdout.
+
+Stdout is a good exporter but not the one you should use in production.
+There are a lot of open source tracer around: Zipkin, Jaeger, Honeycomb,
+AWS X-Ray, Google StackDriver. I tend to use Jaeger because it is in Go
+and it is open source.
+
+This commit adds the flag `--tracer` by default it is set to stdout, but
+if you use `--tracer jaeger` the traces will be send to Jaeger. You can
+override the Jaeger URl with `--tracer-jaeger-address`
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ docker-compose.yaml          |  2 +-
+ frontend/config/config.go    |  8 +++---
+ frontend/handler/getitems.go | 11 ++++++++
+ frontend/handler/health.go   |  9 +++++--
+ frontend/handler/pay.go      |  4 +++
+ frontend/main.go             | 49 +++++++++++++++++++++++++++++++++---
+ 6 files changed, 74 insertions(+), 9 deletions(-)
+
+diff --git a/docker-compose.yaml b/docker-compose.yaml
+index bb9b123..6474bea 100644
+--- a/docker-compose.yaml
++++ b/docker-compose.yaml
+@@ -90,7 +90,7 @@ services:
+   # frontend is the ui of the project
+   frontend:
+     image: golang:1.14.0-stretch
+-    command: ["go", "run", "-mod", "vendor", "./main.go"]
++    command: ["go", "run", "-mod", "vendor", "./main.go", "--tracer", "jaeger", "--tracer-jaeger-address", "http://jaeger:14268/api/traces"]
+     ports:
+       - '3000:3000'
+     volumes:
+diff --git a/frontend/config/config.go b/frontend/config/config.go
+index 5524a5b..55bd702 100644
+--- a/frontend/config/config.go
++++ b/frontend/config/config.go
+@@ -1,7 +1,9 @@
+ package config
+
+ type Config struct {
+-	ItemHost     string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
+-	DiscountHost string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
+-	PayHost      string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	ItemHost      string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
++	DiscountHost  string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
++	PayHost       string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	Tracer        string `long:"tracer" description:"The place where traces get shiped to. By default it is stdout. Jaeger is also supported" default:"stdout"`
++	JaegerAddress string `long:"tracer-jaeger-address" description:"If Jaeger is set as tracer output this is the way you ovverride where to ship data to" default:"http://localhost:14268/api/traces"`
+ }
+diff --git a/frontend/handler/getitems.go b/frontend/handler/getitems.go
+index 54a3d32..887b899 100644
+--- a/frontend/handler/getitems.go
++++ b/frontend/handler/getitems.go
+@@ -9,6 +9,9 @@ import (
+ 	"strconv"
+
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/api/trace"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+
+@@ -32,14 +35,20 @@ type DiscountResponse struct {
+ 	} `json:"discount"`
  }
 
- func loggingMiddleware(logger *zap.Logger, h http.Handler) http.Handler {
- 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-+		if span := opentracing.SpanFromContext(r.Context()); span != nil {
-+			if sc, ok := span.Context().(jaeger.SpanContext); ok {
-+				w.Header().Add("X-Trace-ID", sc.TraceID().String())
-+			}
++var props = propagation.New(propagation.WithInjectors(trace.B3{}))
++
+ func getDiscountPerItem(ctx context.Context, hclient *http.Client, itemID int, discountHost string) (int, error) {
+ 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/discount", discountHost), nil)
+ 	if err != nil {
+ 		return 0, err
+ 	}
++
+ 	q := req.URL.Query()
+ 	q.Add("itemid", strconv.Itoa(itemID))
+ 	req.URL.RawQuery = q.Encode()
++
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
+ 	if err != nil {
+ 		return 0, err
+@@ -88,6 +97,8 @@ func (h *getItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		http.Error(w, err.Error(), 500)
+ 		return
+ 	}
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := h.hclient.Do(req)
+ 	if err != nil {
+ 		h.logger.Error(err.Error())
+diff --git a/frontend/handler/health.go b/frontend/handler/health.go
+index fa9e52f..39fd873 100644
+--- a/frontend/handler/health.go
++++ b/frontend/handler/health.go
+@@ -1,12 +1,15 @@
+ package handler
+
+ import (
++	"context"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io/ioutil"
+ 	"net/http"
+
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+
+@@ -50,7 +53,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	}
+ 	w.Header().Add("Content-Type", "application/json")
+
+-	itemCheck := checkItem(h.config.ItemHost, h.hclient)
++	itemCheck := checkItem(r.Context(), h.config.ItemHost, h.hclient)
+ 	if itemCheck.Status == healthy {
+ 		b.Status = healthy
+ 	}
+@@ -68,13 +71,15 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	fmt.Fprintf(w, string(body))
+ }
+
+-func checkItem(host string, hclient *http.Client) check {
++func checkItem(ctx context.Context, host string, hclient *http.Client) check {
+ 	c := check{
+ 		Name:   "item",
+ 		Error:  "",
+ 		Status: unhealthy,
+ 	}
+ 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
+ 	if err != nil {
+ 		c.Error = err.Error()
+diff --git a/frontend/handler/pay.go b/frontend/handler/pay.go
+index f3e5434..49d63c1 100644
+--- a/frontend/handler/pay.go
++++ b/frontend/handler/pay.go
+@@ -5,6 +5,8 @@ import (
+ 	"net/http"
+
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+
+@@ -38,6 +40,8 @@ func (h *payHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		http.Error(w, err.Error(), 500)
+ 		return
+ 	}
++	ctx, req := httptrace.W3C(r.Context(), req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	req.Header.Add("Content-Type", "application/json")
+ 	resp, err := h.hclient.Do(req)
+ 	if err != nil {
+diff --git a/frontend/main.go b/frontend/main.go
+index 35a084c..5f5e157 100644
+--- a/frontend/main.go
++++ b/frontend/main.go
+@@ -8,6 +8,11 @@ import (
+ 	"github.com/gianarb/shopmany/frontend/config"
+ 	"github.com/gianarb/shopmany/frontend/handler"
+ 	flags "github.com/jessevdk/go-flags"
++	"go.opentelemetry.io/otel/api/global"
++	"go.opentelemetry.io/otel/exporters/trace/jaeger"
++	"go.opentelemetry.io/otel/exporters/trace/stdout"
++	"go.opentelemetry.io/otel/plugin/othttp"
++	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+ 	"go.uber.org/zap"
+ )
+
+@@ -21,6 +26,44 @@ func main() {
+ 		panic(err)
+ 	}
+
++	exporter, err := stdout.NewExporter(stdout.Options{PrettyPrint: true})
++	if err != nil {
++		log.Fatal(err)
++	}
++	tp, err := sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++		sdktrace.WithSyncer(exporter))
++	if err != nil {
++		log.Fatal(err)
++	}
++	global.SetTraceProvider(tp)
++
++	if config.Tracer == "jaeger" {
++
++		logger.Info("Used the tracer output jaeger")
++		// Create Jaeger Exporter
++		exporter, err := jaeger.NewExporter(
++			jaeger.WithCollectorEndpoint(config.JaegerAddress),
++			jaeger.WithProcess(jaeger.Process{
++				ServiceName: "frontend",
++			}),
++		)
++		if err != nil {
++			log.Fatal(err)
 +		}
- 		logger.Info(
- 			"HTTP Request",
- 			zap.String("Path", r.URL.Path),
++
++		// For demoing purposes, always sample. In a production application, you should
++		// configure this to a trace.ProbabilitySampler set at the desired
++		// probability.
++		tp, err := sdktrace.NewProvider(
++			sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++			sdktrace.WithSyncer(exporter))
++		if err != nil {
++			log.Fatal(err)
++		}
++		global.SetTraceProvider(tp)
++		defer exporter.Flush()
++	}
++
+ 	fmt.Printf("Item Host: %v\n", config.ItemHost)
+ 	fmt.Printf("Pay Host: %v\n", config.PayHost)
+ 	fmt.Printf("Discount Host: %v\n", config.DiscountHost)
+@@ -39,9 +82,9 @@ func main() {
+ 	healthHandler.WithLogger(logger)
+
+ 	mux.Handle("/", fs)
+-	mux.Handle("/api/items", getItemsHandler)
+-	mux.Handle("/api/pay", payHandler)
+-	mux.Handle("/health", healthHandler)
++	mux.Handle("/api/items", othttp.NewHandler(getItemsHandler, "http.GetItems"))
++	mux.Handle("/api/pay", othttp.NewHandler(payHandler, "http.Pay"))
++	mux.Handle("/health", othttp.NewHandler(healthHandler, "http.health"))
+
+ 	log.Println("Listening on port 3000...")
+ 	http.ListenAndServe(":3000", loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux))
+--
+2.23.0
 ```
+
 \newpage

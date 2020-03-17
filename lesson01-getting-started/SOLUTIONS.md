@@ -3,13 +3,20 @@
 ## Item
 
 ```diff
-commit 47a089f9b0f9fa08415c8a0d7f92f0f1a291a747
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Thu Mar 14 09:40:16 2019 +0100
+From 378cd70c0eac5bf0ab97903e09e4b319d8e5f2eb Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 09:40:16 +0100
+Subject: [PATCH] feat(items): Added healtcheck endpoint
 
-    Added healthcherck endpoint
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/config/autoload/containers.global.php |  2 +-
+ items/config/routes.php                     |  2 +
+ items/src/App/src/Handler/Health.php        | 49 +++++++++++++++++++++
+ items/src/App/src/Handler/HealthFactory.php | 14 ++++++
+ 4 files changed, 66 insertions(+), 1 deletion(-)
+ create mode 100644 items/src/App/src/Handler/Health.php
+ create mode 100644 items/src/App/src/Handler/HealthFactory.php
 
 diff --git a/items/config/autoload/containers.global.php b/items/config/autoload/containers.global.php
 index 3166620..511480b 100644
@@ -122,27 +129,31 @@ index 0000000..e974128
 +        return new Health($mysqlConfig['hostname'], $mysqlConfig['user'], $mysqlConfig['pass'], $mysqlConfig['dbname']);
 +    }
 +}
+--
+2.23.0
 ```
 
 ## Discount
 
 ```diff
-commit 6eece7c468462dbeb5da24e6b4432d9853f0ecb8
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Sun Mar 17 11:27:17 2019 +0100
+From 64be9f3b6237f2851291bbd2187d951007530761 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sun, 17 Mar 2019 11:27:17 +0100
+Subject: [PATCH] feat(discount): Added healthcheck
 
-    Added healthcheck to discount service
+Now the discount service has its own healthcheck endpoint.
 
-    Now the discount service has its own healthcheck endpoint.
+```
+METHOD: GET
+PATH: /health
+```
 
-    ```
-    METHOD: GET
-    PATH: /health
-    ```
+It checks if th mongodb is reachable or not.
 
-    It checks if th mongodb is reachable or not.
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/server.js | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
 
 diff --git a/discount/server.js b/discount/server.js
 index a7cb17b..cedde93 100644
@@ -177,18 +188,26 @@ index a7cb17b..cedde93 100644
 
  app.get("/discount", function(req, res, next) {
    client.connect(function(err) {
+--
+2.23.0
 ```
 
 ## Pay
 
 ```diff
-commit 123dfdc67d1fe0725de1d88f4a4173e6705b4639
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Sat Mar 23 15:48:10 2019 +0100
+From 360c2265f77163da6c30f1aaa662c2d26ee43ff3 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Sat, 23 Mar 2019 15:48:10 +0100
+Subject: [PATCH] feat(pay): Added healthcheck
 
-    Added healthcheck for pay service
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ pay/src/main/java/pay/Application.java    | 23 ++++++++++++++++-
+ pay/src/main/java/pay/HealthCheck.java    | 31 +++++++++++++++++++++++
+ pay/src/main/java/pay/HealthResponse.java | 29 +++++++++++++++++++++
+ 3 files changed, 82 insertions(+), 1 deletion(-)
+ create mode 100644 pay/src/main/java/pay/HealthCheck.java
+ create mode 100644 pay/src/main/java/pay/HealthResponse.java
 
 diff --git a/pay/src/main/java/pay/Application.java b/pay/src/main/java/pay/Application.java
 index c66e0c0..ef1194a 100644
@@ -307,21 +326,27 @@ index 0000000..8431f53
 +        return checks;
 +    }
 +}
+--
+2.23.0
 ```
 
 # Frontend
 
 ```diff
-commit cbc932799735f55aa4c7c15aa4718e0206ab6f9d
-Author: Gianluca Arbezzano <gianarb92@gmail.com>
-Date:   Thu Mar 14 18:34:17 2019 +0100
+From 07879e69ff65853685e7711420103f7f7e093c25 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 18:34:17 +0100
+Subject: [PATCH] feat(frontend): Added healthcheck endpoint
 
-    Added healthcheck endpoint to the frontend svc
+Now the frontend service has its healthcheck to validate if service that
+returns the list of items is working.
 
-    Now the frontend service has its healthcheck to validate if service that
-    returns the list of items is working.
-
-    Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ frontend/handler/health.go | 87 ++++++++++++++++++++++++++++++++++++++
+ frontend/main.go           |  1 +
+ 2 files changed, 88 insertions(+)
+ create mode 100644 frontend/handler/health.go
 
 diff --git a/frontend/handler/health.go b/frontend/handler/health.go
 new file mode 100644
@@ -428,6 +453,8 @@ index f78d524..ee16adc 100644
 
  	log.Println("Listening on port 3000...")
  	http.ListenAndServe(":3000", nil)
+--
+2.23.0
 ```
 
 \newpage

@@ -1,0 +1,147 @@
+From d646f1892643d65b409397c47b363e4e01b4c38a Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 12 Mar 2020 21:43:52 +0100
+Subject: [PATCH] feat(discount): added tracing
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ discount/package.json |  8 ++++++++
+ discount/server.js    | 26 ++++++++++++++++++--------
+ discount/tracer.js    | 42 ++++++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 68 insertions(+), 8 deletions(-)
+ create mode 100644 discount/tracer.js
+
+diff --git a/discount/package.json b/discount/package.json
+index 1640ae1..fff748e 100644
+--- a/discount/package.json
++++ b/discount/package.json
+@@ -10,6 +10,14 @@
+   "author": "",
+   "license": "ISC",
+   "dependencies": {
++    "@opentelemetry/api": "^0.5.0",
++    "@opentelemetry/exporter-jaeger": "^0.5.0",
++    "@opentelemetry/node": "^0.5.0",
++    "@opentelemetry/plugin-http": "^0.5.0",
++    "@opentelemetry/plugin-dns": "^0.5.0",
++    "@opentelemetry/plugin-mongodb": "^0.5.0",
++    "@opentelemetry/tracing": "^0.5.0",
++    "@opentelemetry/plugin-express": "^0.5.0",
+     "express": "^4.16.4",
+     "express-pino-logger": "^4.0.0",
+     "mongodb": "^3.1.13"
+diff --git a/discount/server.js b/discount/server.js
+index 50a32a9..78b89e1 100644
+--- a/discount/server.js
++++ b/discount/server.js
+@@ -1,20 +1,26 @@
+-var express = require("express");
++'use strict';
++
++const url = process.env.DISCOUNT_MONGODB_URL || 'mongodb://discountdb:27017';
++const jaegerHost = process.env.JAEGER_HOST || 'jaeger';
+ 
++const logger = require('pino')()
++const tracer = require('./tracer')('discount', jaegerHost, logger);
++
++var express = require("express");
+ var app = express();
+ 
+ const MongoClient = require('mongodb').MongoClient;
+-const url = 'mongodb://discountdb:27017';
+ const dbName = 'shopmany';
+ const client = new MongoClient(url, { useNewUrlParser: true });
+-app.use(errorHandler)
+ 
+-const logger = require('pino')()
+ const expressPino = require('express-pino-logger')({
+   logger: logger.child({"service": "httpd"})
+ })
++
++//app.use(errorHandler)
+ app.use(expressPino)
+ 
+-app.get("/health", function(req, res, next) {
++app.get("/health", function(req, res) {
+   var resbody = {
+     "status": "healthy",
+     checks: [],
+@@ -40,7 +46,11 @@ app.get("/health", function(req, res, next) {
+ 
+ app.get("/discount", function(req, res, next) {
+   client.connect(function(err) {
+-    db = client.db(dbName);
++    if (err != null) {
++      req.log.error(err.toString());
++      return next(err)
++    }
++    let db = client.db(dbName);
+     db.collection('discount').find({}).toArray(function(err, discounts) {
+       if (err != null) {
+         req.log.error(err.toString());
+@@ -63,12 +73,12 @@ app.get("/discount", function(req, res, next) {
+   });
+ });
+ 
+-app.use(function(req, res, next) {
++app.use(function(req, res) {
+   req.log.warn("route not found");
+   return res.status(404).json({error: "route not found"});
+ });
+ 
+-function errorHandler(err, req, res, next) {
++function errorHandler(err, req, res) {
+   req.log.error(err.toString(), {
+     error_status: err.status
+   });
+diff --git a/discount/tracer.js b/discount/tracer.js
+new file mode 100644
+index 0000000..a39d0c7
+--- /dev/null
++++ b/discount/tracer.js
+@@ -0,0 +1,42 @@
++'use strict';
++
++const opentelemetry = require('@opentelemetry/api');
++const { NodeTracerProvider } = require('@opentelemetry/node');
++const { SimpleSpanProcessor } = require('@opentelemetry/tracing');
++const { JaegerExporter } = require('@opentelemetry/exporter-jaeger');
++const { B3Propagator } = require('@opentelemetry/core');
++
++module.exports = (serviceName, jaegerHost, logger) => {
++  const provider = new NodeTracerProvider({
++    plugins: {
++      dns: {
++        enabled: true,
++        path: '@opentelemetry/plugin-dns',
++      },
++      mongodb: {
++        enabled: true,
++        path: '@opentelemetry/plugin-mongodb',
++      },
++      http: {
++        enabled: true,
++        path: '@opentelemetry/plugin-http',
++      },
++      express: {
++        enabled: true,
++        path: '@opentelemetry/plugin-express',
++      },
++    }
++  });
++
++  let exporter = new JaegerExporter({
++    logger: logger,
++    serviceName: serviceName,
++    host: jaegerHost
++  });
++
++  provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
++  provider.register({
++    propagator: new B3Propagator(),
++  });
++  return opentelemetry.trace.getTracer("discount");
++};
+-- 
+2.23.0
+

@@ -1,0 +1,227 @@
+From 99bb8bc64da8dda88be47a74dd327ec540358ff9 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Tue, 17 Mar 2020 14:05:48 +0100
+Subject: [PATCH] feat(items): tracing instrumentation with b3 and opencensus
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/composer.json                           |  6 ++-
+ items/config/autoload/containers.global.php   |  2 +
+ items/config/autoload/local.php               |  4 ++
+ items/config/pipeline.php                     |  2 +
+ .../App/src/Middleware/TracerMiddleware.php   | 46 +++++++++++++++++++
+ .../Middleware/TracerMiddlewareFactory.php    | 19 ++++++++
+ items/src/App/src/Service/TracerFactory.php   | 45 ++++++++++++++++++
+ 7 files changed, 122 insertions(+), 2 deletions(-)
+ create mode 100644 items/src/App/src/Middleware/TracerMiddleware.php
+ create mode 100644 items/src/App/src/Middleware/TracerMiddlewareFactory.php
+ create mode 100644 items/src/App/src/Service/TracerFactory.php
+
+diff --git a/items/composer.json b/items/composer.json
+index c0badf9..dadea8b 100644
+--- a/items/composer.json
++++ b/items/composer.json
+@@ -18,6 +18,7 @@
+     "config": {
+         "sort-packages": true
+     },
++    "minimum-stability": "dev",
+     "extra": {
+         "zf": {
+             "component-whitelist": [
+@@ -39,6 +40,8 @@
+     "require": {
+         "php": "^7.1",
+         "http-interop/http-middleware": "^0.5.0",
++        "monolog/monolog": "1.24.0",
++        "jcchavezs/zipkin-opentracing": "0.1.4",
+         "zendframework/zend-component-installer": "^2.1.1",
+         "zendframework/zend-config-aggregator": "^1.0",
+         "zendframework/zend-diactoros": "^1.7.1 || ^2.0",
+@@ -46,8 +49,7 @@
+         "zendframework/zend-expressive-fastroute": "^3.0",
+         "zendframework/zend-expressive-helpers": "^5.0",
+         "zendframework/zend-servicemanager": "^3.3",
+-        "zendframework/zend-stdlib": "^3.1",
+-        "monolog/monolog": "1.24.0"
++        "zendframework/zend-stdlib": "^3.1"
+     },
+     "require-dev": {
+         "phpunit/phpunit": "^7.0.1",
+diff --git a/items/config/autoload/containers.global.php b/items/config/autoload/containers.global.php
+index 12a5b18..d36eb04 100644
+--- a/items/config/autoload/containers.global.php
++++ b/items/config/autoload/containers.global.php
+@@ -21,7 +21,9 @@ return [
+             App\Handler\Item::class => App\Handler\ItemFactory::class,
+             App\Handler\Health::class => App\Handler\HealthFactory::class,
+             "Logger" => App\Service\LoggerFactory::class,
++            "Tracer" => App\Service\TracerFactory::class,
+             App\Middleware\LoggerMiddleware::class => App\Middleware\LoggerMiddlewareFactory::class,
++            App\Middleware\TracerMiddleware::class => App\Middleware\TracerMiddlewareFactory::class,
+         ],
+     ],
+ ];
+diff --git a/items/config/autoload/local.php b/items/config/autoload/local.php
+index 824e725..3726cc6 100644
+--- a/items/config/autoload/local.php
++++ b/items/config/autoload/local.php
+@@ -15,4 +15,8 @@ return [
+         "user" => "root",
+         "pass" => "root",
+     ],
++    "zipkin" => [
++        "serviceName" => 'items',
++        "reporterURL" => 'http://jaeger:9411/api/v2/spans',
++    ],
+ ];
+diff --git a/items/config/pipeline.php b/items/config/pipeline.php
+index e9287fd..6e050ca 100644
+--- a/items/config/pipeline.php
++++ b/items/config/pipeline.php
+@@ -15,12 +15,14 @@ use Zend\Expressive\Router\Middleware\MethodNotAllowedMiddleware;
+ use Zend\Expressive\Router\Middleware\RouteMiddleware;
+ use Zend\Stratigility\Middleware\ErrorHandler;
+ use App\Middleware\LoggerMiddleware;
++use App\Middleware\TracerMiddleware;
+ 
+ /**
+  * Setup middleware pipeline:
+  */
+ return function (Application $app, MiddlewareFactory $factory, ContainerInterface $container) : void {
+     $app->pipe($container->get(LoggerMiddleware::class));
++    $app->pipe($container->get(TracerMiddleware::class));
+     // The error handler should be the first (most outer) middleware to catch
+     // all Exceptions.
+     $app->pipe(ErrorHandler::class);
+diff --git a/items/src/App/src/Middleware/TracerMiddleware.php b/items/src/App/src/Middleware/TracerMiddleware.php
+new file mode 100644
+index 0000000..6da42be
+--- /dev/null
++++ b/items/src/App/src/Middleware/TracerMiddleware.php
+@@ -0,0 +1,46 @@
++<?php
++namespace App\Middleware;
++
++use ErrorException;
++use OpenTracing\Formats;
++use OpenTracing\Tags;
++use OpenTracing\GlobalTracer;
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Server\MiddlewareInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\RequestHandlerInterface;
++
++class TracerMiddleware implements MiddlewareInterface
++{
++    private $tracer;
++
++    public function __construct($tracer)
++    {
++        $this->tracer = $tracer;
++    }
++
++    public function process(ServerRequestInterface $request, RequestHandlerInterface $handler) : ResponseInterface
++    {
++        $spanContext = $this->tracer->extract(
++            Formats\HTTP_HEADERS,
++            $request
++        );
++        $span = $this->tracer->startSpan($request->getMethod(), [
++            'child_of' => $spanContext,
++            'tags' => [
++                Tags\HTTP_METHOD => $request->getMethod(),
++                'http.path' => $request->getUri()->getPath(),
++            ]
++        ]);
++        
++        try {
++            $response = $handler->handle($request);
++            $span->setTag(Tags\HTTP_STATUS_CODE, $response->getStatusCode());
++            return $response;
++        } catch (\Throwable $e) {
++            $span->setTag(Tags\ERROR, $e->getMessage());
++        } finally {
++            $span->finish();
++        }
++    }
++}
+diff --git a/items/src/App/src/Middleware/TracerMiddlewareFactory.php b/items/src/App/src/Middleware/TracerMiddlewareFactory.php
+new file mode 100644
+index 0000000..fe49d64
+--- /dev/null
++++ b/items/src/App/src/Middleware/TracerMiddlewareFactory.php
+@@ -0,0 +1,19 @@
++<?php
++namespace App\Middleware;
++
++use Psr\Container\ContainerInterface;
++use ErrorException;
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\MiddlewareInterface;
++use Psr\Http\Server\RequestHandlerInterface;
++
++class TracerMiddlewareFactory
++{
++    private $tracer;
++
++    public function __invoke(ContainerInterface $container) {
++        $tracer = $container->get("Tracer");
++        return new TracerMiddleware($tracer);
++    }
++}
+diff --git a/items/src/App/src/Service/TracerFactory.php b/items/src/App/src/Service/TracerFactory.php
+new file mode 100644
+index 0000000..6795347
+--- /dev/null
++++ b/items/src/App/src/Service/TracerFactory.php
+@@ -0,0 +1,45 @@
++<?php
++namespace App\Service;
++
++use Zipkin\Endpoint;
++use Psr\Log\NullLogger;
++use Zipkin\TracingBuilder;
++use OpenTracing\GlobalTracer;
++use OpenTracing\NoopTracer;
++use ZipkinOpenTracing\Tracer;
++use Zipkin\Samplers\BinarySampler;
++use Psr\Container\ContainerInterface;
++use Zipkin\Reporters\Http\CurlFactory;
++use Zipkin\Reporters\Http as HttpReporter;
++
++class TracerFactory
++{
++    public function __invoke(ContainerInterface $container)
++    {
++        $zipkinConfig = $container->get('config')['zipkin'] ?? [];
++        if (empty($zipkinConfig)) {
++            // If zipkin is not configured then we return an empty tracer.
++            return NoopTracer::create();
++        }
++
++        $endpoint = Endpoint::create($zipkinConfig['serviceName']);
++        $reporter = new HttpReporter(CurlFactory::create(), ["endpoint_url" => $zipkinConfig['reporterURL'] ?? 'http://localhost:9411/api/v2/spans']);
++        $sampler = BinarySampler::createAsAlwaysSample();
++        $tracing = TracingBuilder::create()
++            ->havingLocalEndpoint($endpoint)
++           ->havingSampler($sampler)
++           ->havingReporter($reporter)
++           ->build();
++
++        $zipkinTracer = new Tracer($tracing);
++
++        register_shutdown_function(function () {
++            /* Flush the tracer to the backend */
++            $zipkinTracer = GlobalTracer::get();
++            $zipkinTracer->flush();
++        });
++
++        GlobalTracer::set($zipkinTracer);
++        return $zipkinTracer;
++    }
++}
+-- 
+2.23.0
+

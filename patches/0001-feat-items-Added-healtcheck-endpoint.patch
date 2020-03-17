@@ -1,0 +1,129 @@
+From 378cd70c0eac5bf0ab97903e09e4b319d8e5f2eb Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Thu, 14 Mar 2019 09:40:16 +0100
+Subject: [PATCH] feat(items): Added healtcheck endpoint
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ items/config/autoload/containers.global.php |  2 +-
+ items/config/routes.php                     |  2 +
+ items/src/App/src/Handler/Health.php        | 49 +++++++++++++++++++++
+ items/src/App/src/Handler/HealthFactory.php | 14 ++++++
+ 4 files changed, 66 insertions(+), 1 deletion(-)
+ create mode 100644 items/src/App/src/Handler/Health.php
+ create mode 100644 items/src/App/src/Handler/HealthFactory.php
+
+diff --git a/items/config/autoload/containers.global.php b/items/config/autoload/containers.global.php
+index 3166620..511480b 100644
+--- a/items/config/autoload/containers.global.php
++++ b/items/config/autoload/containers.global.php
+@@ -14,12 +14,12 @@ return [
+         // not require arguments to the constructor. Map a service name to the
+         // class name.
+         'invokables' => [
+-            // Fully\Qualified\InterfaceName::class => Fully\Qualified\ClassName::class,
+         ],
+         // Use 'factories' for services provided by callbacks/factory classes.
+         'factories'  => [
+             App\Service\ItemService::class => App\Service\ItemServiceFactory::class,
+             App\Handler\Item::class => App\Handler\ItemFactory::class,
++            App\Handler\Health::class => App\Handler\HealthFactory::class,
+         ],
+     ],
+ ];
+diff --git a/items/config/routes.php b/items/config/routes.php
+index fc0abb7..e37ed12 100644
+--- a/items/config/routes.php
++++ b/items/config/routes.php
+@@ -6,6 +6,7 @@ use Psr\Container\ContainerInterface;
+ use Zend\Expressive\Application;
+ use Zend\Expressive\MiddlewareFactory;
+ use App\Handler\Item;
++use App\Handler\Health;
+ 
+ /**
+  * Setup routes with a single request method:
+@@ -22,4 +23,5 @@ use App\Handler\Item;
+  */
+ return function (Application $app, MiddlewareFactory $factory, ContainerInterface $container) : void {
+     $app->get('/item', Item::class);
++    $app->get('/health', Health::class);
+ };
+diff --git a/items/src/App/src/Handler/Health.php b/items/src/App/src/Handler/Health.php
+new file mode 100644
+index 0000000..47c210e
+--- /dev/null
++++ b/items/src/App/src/Handler/Health.php
+@@ -0,0 +1,49 @@
++<?php
++
++namespace App\Handler;
++use Psr\Http\Message\ResponseInterface;
++use Psr\Http\Message\ServerRequestInterface;
++use Psr\Http\Server\RequestHandlerInterface;
++use Zend\Diactoros\Response\JsonResponse;
++use App\Service\ItemService;
++use \PDO;
++
++class Health implements RequestHandlerInterface
++{
++
++    public function __construct($hostname, $username, $password, $dbname) {
++        $this->username = $username;
++        $this->hostname = $hostname;
++        $this->password = $password;
++        $this->dbname = $dbname;
++    }
++
++    public function handle(ServerRequestInterface $request) : ResponseInterface
++    {
++        $statusCode = 500;
++        $body = new \stdClass();
++        $body->status = "unhealthy";
++        $mySqlCheck = new \stdClass();
++        $mySqlCheck->name = "mysql";
++        $mySqlCheck->status = "unhealthy";
++
++        try {
++            $this->pdo = new PDO("mysql:host=$this->hostname;port=3306;dbname=$this->dbname", $this->username, $this->password);
++            $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
++            $this->pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
++
++            $statusCode = 200;
++            $body->status = "healthy";
++            $mySqlCheck->status = "healthy";
++
++        } catch(\PDOException $ex){
++            $mySqlCheck->error = $ex->getMessage();
++        }
++        $body->checks = [$mySqlCheck];
++
++        $response = new JsonResponse($body);
++        $response = $response->withStatus($statusCode);
++
++        return $response;
++    }
++}
+diff --git a/items/src/App/src/Handler/HealthFactory.php b/items/src/App/src/Handler/HealthFactory.php
+new file mode 100644
+index 0000000..e974128
+--- /dev/null
++++ b/items/src/App/src/Handler/HealthFactory.php
+@@ -0,0 +1,14 @@
++<?php
++namespace App\Handler;
++
++use Psr\Container\ContainerInterface;
++use Zend\Expressive\Template\TemplateRendererInterface;
++
++class HealthFactory
++{
++    public function __invoke(ContainerInterface $container)
++    {
++        $mysqlConfig = $container->get('config')['mysql'];
++        return new Health($mysqlConfig['hostname'], $mysqlConfig['user'], $mysqlConfig['pass'], $mysqlConfig['dbname']);
++    }
++}
+-- 
+2.23.0
+

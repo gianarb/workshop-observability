@@ -1,0 +1,246 @@
+From 297539e0b76235ad8ef39c5e8e0f4c1080b12cf8 Mon Sep 17 00:00:00 2001
+From: Gianluca Arbezzano <gianarb92@gmail.com>
+Date: Wed, 11 Mar 2020 21:48:37 +0100
+Subject: [PATCH] feat(frontend): Instrument http handlers
+
+OpenTelemetry is is made of exporters, the easier to use is the stdout
+one. It prints JSON to the process stdout.
+
+Stdout is a good exporter but not the one you should use in production.
+There are a lot of open source tracer around: Zipkin, Jaeger, Honeycomb,
+AWS X-Ray, Google StackDriver. I tend to use Jaeger because it is in Go
+and it is open source.
+
+This commit adds the flag `--tracer` by default it is set to stdout, but
+if you use `--tracer jaeger` the traces will be send to Jaeger. You can
+override the Jaeger URl with `--tracer-jaeger-address`
+
+Signed-off-by: Gianluca Arbezzano <gianarb92@gmail.com>
+---
+ docker-compose.yaml          |  2 +-
+ frontend/config/config.go    |  8 +++---
+ frontend/handler/getitems.go | 11 ++++++++
+ frontend/handler/health.go   |  9 +++++--
+ frontend/handler/pay.go      |  4 +++
+ frontend/main.go             | 49 +++++++++++++++++++++++++++++++++---
+ 6 files changed, 74 insertions(+), 9 deletions(-)
+
+diff --git a/docker-compose.yaml b/docker-compose.yaml
+index bb9b123..6474bea 100644
+--- a/docker-compose.yaml
++++ b/docker-compose.yaml
+@@ -90,7 +90,7 @@ services:
+   # frontend is the ui of the project
+   frontend:
+     image: golang:1.14.0-stretch
+-    command: ["go", "run", "-mod", "vendor", "./main.go"]
++    command: ["go", "run", "-mod", "vendor", "./main.go", "--tracer", "jaeger", "--tracer-jaeger-address", "http://jaeger:14268/api/traces"]
+     ports:
+       - '3000:3000'
+     volumes:
+diff --git a/frontend/config/config.go b/frontend/config/config.go
+index 5524a5b..55bd702 100644
+--- a/frontend/config/config.go
++++ b/frontend/config/config.go
+@@ -1,7 +1,9 @@
+ package config
+ 
+ type Config struct {
+-	ItemHost     string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
+-	DiscountHost string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
+-	PayHost      string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	ItemHost      string `long:"item-host" description:"The hostname where the item service is located" default:"http://item"`
++	DiscountHost  string `long:"discount-host" description:"The hostname where the discount service is located" default:"http://discount:3000"`
++	PayHost       string `long:"pay-host" description:"The hostname where the pay service is located" default:"http://pay:8080"`
++	Tracer        string `long:"tracer" description:"The place where traces get shiped to. By default it is stdout. Jaeger is also supported" default:"stdout"`
++	JaegerAddress string `long:"tracer-jaeger-address" description:"If Jaeger is set as tracer output this is the way you ovverride where to ship data to" default:"http://localhost:14268/api/traces"`
+ }
+diff --git a/frontend/handler/getitems.go b/frontend/handler/getitems.go
+index 54a3d32..887b899 100644
+--- a/frontend/handler/getitems.go
++++ b/frontend/handler/getitems.go
+@@ -9,6 +9,9 @@ import (
+ 	"strconv"
+ 
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/api/trace"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -32,14 +35,20 @@ type DiscountResponse struct {
+ 	} `json:"discount"`
+ }
+ 
++var props = propagation.New(propagation.WithInjectors(trace.B3{}))
++
+ func getDiscountPerItem(ctx context.Context, hclient *http.Client, itemID int, discountHost string) (int, error) {
+ 	req, err := http.NewRequest("GET", fmt.Sprintf("%s/discount", discountHost), nil)
+ 	if err != nil {
+ 		return 0, err
+ 	}
++
+ 	q := req.URL.Query()
+ 	q.Add("itemid", strconv.Itoa(itemID))
+ 	req.URL.RawQuery = q.Encode()
++
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
+ 	if err != nil {
+ 		return 0, err
+@@ -88,6 +97,8 @@ func (h *getItemsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		http.Error(w, err.Error(), 500)
+ 		return
+ 	}
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := h.hclient.Do(req)
+ 	if err != nil {
+ 		h.logger.Error(err.Error())
+diff --git a/frontend/handler/health.go b/frontend/handler/health.go
+index fa9e52f..39fd873 100644
+--- a/frontend/handler/health.go
++++ b/frontend/handler/health.go
+@@ -1,12 +1,15 @@
+ package handler
+ 
+ import (
++	"context"
+ 	"encoding/json"
+ 	"fmt"
+ 	"io/ioutil"
+ 	"net/http"
+ 
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -50,7 +53,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	}
+ 	w.Header().Add("Content-Type", "application/json")
+ 
+-	itemCheck := checkItem(h.config.ItemHost, h.hclient)
++	itemCheck := checkItem(r.Context(), h.config.ItemHost, h.hclient)
+ 	if itemCheck.Status == healthy {
+ 		b.Status = healthy
+ 	}
+@@ -68,13 +71,15 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	fmt.Fprintf(w, string(body))
+ }
+ 
+-func checkItem(host string, hclient *http.Client) check {
++func checkItem(ctx context.Context, host string, hclient *http.Client) check {
+ 	c := check{
+ 		Name:   "item",
+ 		Error:  "",
+ 		Status: unhealthy,
+ 	}
+ 	req, _ := http.NewRequest("GET", fmt.Sprintf("%s/health", host), nil)
++	ctx, req = httptrace.W3C(ctx, req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	resp, err := hclient.Do(req)
+ 	if err != nil {
+ 		c.Error = err.Error()
+diff --git a/frontend/handler/pay.go b/frontend/handler/pay.go
+index f3e5434..49d63c1 100644
+--- a/frontend/handler/pay.go
++++ b/frontend/handler/pay.go
+@@ -5,6 +5,8 @@ import (
+ 	"net/http"
+ 
+ 	"github.com/gianarb/shopmany/frontend/config"
++	"go.opentelemetry.io/otel/api/propagation"
++	"go.opentelemetry.io/otel/plugin/httptrace"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -38,6 +40,8 @@ func (h *payHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 		http.Error(w, err.Error(), 500)
+ 		return
+ 	}
++	ctx, req := httptrace.W3C(r.Context(), req)
++	propagation.InjectHTTP(ctx, props, req.Header)
+ 	req.Header.Add("Content-Type", "application/json")
+ 	resp, err := h.hclient.Do(req)
+ 	if err != nil {
+diff --git a/frontend/main.go b/frontend/main.go
+index 35a084c..5f5e157 100644
+--- a/frontend/main.go
++++ b/frontend/main.go
+@@ -8,6 +8,11 @@ import (
+ 	"github.com/gianarb/shopmany/frontend/config"
+ 	"github.com/gianarb/shopmany/frontend/handler"
+ 	flags "github.com/jessevdk/go-flags"
++	"go.opentelemetry.io/otel/api/global"
++	"go.opentelemetry.io/otel/exporters/trace/jaeger"
++	"go.opentelemetry.io/otel/exporters/trace/stdout"
++	"go.opentelemetry.io/otel/plugin/othttp"
++	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+ 	"go.uber.org/zap"
+ )
+ 
+@@ -21,6 +26,44 @@ func main() {
+ 		panic(err)
+ 	}
+ 
++	exporter, err := stdout.NewExporter(stdout.Options{PrettyPrint: true})
++	if err != nil {
++		log.Fatal(err)
++	}
++	tp, err := sdktrace.NewProvider(sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++		sdktrace.WithSyncer(exporter))
++	if err != nil {
++		log.Fatal(err)
++	}
++	global.SetTraceProvider(tp)
++
++	if config.Tracer == "jaeger" {
++
++		logger.Info("Used the tracer output jaeger")
++		// Create Jaeger Exporter
++		exporter, err := jaeger.NewExporter(
++			jaeger.WithCollectorEndpoint(config.JaegerAddress),
++			jaeger.WithProcess(jaeger.Process{
++				ServiceName: "frontend",
++			}),
++		)
++		if err != nil {
++			log.Fatal(err)
++		}
++
++		// For demoing purposes, always sample. In a production application, you should
++		// configure this to a trace.ProbabilitySampler set at the desired
++		// probability.
++		tp, err := sdktrace.NewProvider(
++			sdktrace.WithConfig(sdktrace.Config{DefaultSampler: sdktrace.AlwaysSample()}),
++			sdktrace.WithSyncer(exporter))
++		if err != nil {
++			log.Fatal(err)
++		}
++		global.SetTraceProvider(tp)
++		defer exporter.Flush()
++	}
++
+ 	fmt.Printf("Item Host: %v\n", config.ItemHost)
+ 	fmt.Printf("Pay Host: %v\n", config.PayHost)
+ 	fmt.Printf("Discount Host: %v\n", config.DiscountHost)
+@@ -39,9 +82,9 @@ func main() {
+ 	healthHandler.WithLogger(logger)
+ 
+ 	mux.Handle("/", fs)
+-	mux.Handle("/api/items", getItemsHandler)
+-	mux.Handle("/api/pay", payHandler)
+-	mux.Handle("/health", healthHandler)
++	mux.Handle("/api/items", othttp.NewHandler(getItemsHandler, "http.GetItems"))
++	mux.Handle("/api/pay", othttp.NewHandler(payHandler, "http.Pay"))
++	mux.Handle("/health", othttp.NewHandler(healthHandler, "http.health"))
+ 
+ 	log.Println("Listening on port 3000...")
+ 	http.ListenAndServe(":3000", loggingMiddleware(httpdLogger.With(zap.String("from", "middleware")), mux))
+-- 
+2.23.0
+
