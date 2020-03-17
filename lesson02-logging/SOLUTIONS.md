@@ -1,4 +1,6 @@
-# Item
+## Solution Lesson 2 - Logging
+
+## Item
 
 ```diff
 commit ec86756af8544c8158636c43c27c1b0f10ed497c
@@ -227,7 +229,7 @@ index 0000000..cc60ae0
 +
 ```
 
-# Discount
+## Discount
 
 ```diff
 commit cbc91b1d15b0564c89cb825b9540d309f90526eb
@@ -314,7 +316,7 @@ index cedde93..50a32a9 100644
 +  logger.info("Server running on port 3000");
  });
 ```
-# Pay
+## Pay
 
 ```diff
 commit 0376a283dc843f7beee207b4201b0b57b7cb00ff
@@ -465,7 +467,7 @@ index 0000000..7403409
 +</Configuration>
 ```
 
-# Frontend
+## Frontend
 
 ```diff
 commit 32ca854035f78ab65f1ebb7b2d9c750f6670aaa1
@@ -688,5 +690,6 @@ index ee16adc..35a084c 100644
 +		h.ServeHTTP(w, r)
 +	})
  }
-
 ```
+
+\newpage

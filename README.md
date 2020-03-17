@@ -1,6 +1,9 @@
-# The Observability/Monitoring workshop
-## let's try to out figure what is going on
-### with [Gianluca Arbezzano](https://gianarb.it)
+---
+title: "Application Monitoring"
+author: Gianluca Arbezzano
+geometry: "left=3cm,right=3cm,top=2cm,bottom=2cm"
+output: pdf_document
+---
 
 \newpage
 

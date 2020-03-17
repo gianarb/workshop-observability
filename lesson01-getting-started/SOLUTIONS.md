@@ -1,4 +1,6 @@
-# Item
+# Solution Lesson 1 - Healtcheck
+
+## Item
 
 ```diff
 commit 47a089f9b0f9fa08415c8a0d7f92f0f1a291a747
@@ -122,7 +124,7 @@ index 0000000..e974128
 +}
 ```
 
-# Discount
+## Discount
 
 ```diff
 commit 6eece7c468462dbeb5da24e6b4432d9853f0ecb8
@@ -177,7 +179,7 @@ index a7cb17b..cedde93 100644
    client.connect(function(err) {
 ```
 
-# Pay
+## Pay
 
 ```diff
 commit 123dfdc67d1fe0725de1d88f4a4173e6705b4639
@@ -427,3 +429,5 @@ index f78d524..ee16adc 100644
  	log.Println("Listening on port 3000...")
  	http.ListenAndServe(":3000", nil)
 ```
+
+\newpage

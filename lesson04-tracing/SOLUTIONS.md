@@ -1,4 +1,6 @@
-# Item
+# Solution lesson 4 - Tracing
+
+## Item
 
 ```
 commit 6c0d88375b92ee12d9036974f2f93fe487b2d438
@@ -304,7 +306,7 @@ index b072870..09bb1e6 100644
  }
 ```
 
-# Discount
+## Discount
 
 ```diff
 commit f6880e4341ba095d98346ae9d593c87b0ed73195
@@ -453,7 +455,7 @@ index 50a32a9..b252923 100644
 +}
 ```
 
-# Pay
+## Pay
 
 ```
 commit 98b3c57ee9914eec77f87dffd6d49cbadfe9f4a5
@@ -587,7 +589,7 @@ index 0000000..b1c0118
 +}
 ```
 
-# Frontend
+## Frontend
 
 ```diff
 commit 62641a2f4e39ed5d4c07567278dc69427a9db3cf
@@ -842,3 +844,4 @@ index 35a084c..a310355 100644
  			"HTTP Request",
  			zap.String("Path", r.URL.Path),
 ```
+\newpage

@@ -13,13 +13,15 @@ In short:
 ```bash
 $ git clone git@github.com:gianarb/shopmany.git
 $ cd shopmany
+$ git pull --all
 $ docker-compose up frontend
 ```
 
-You can open your browser and visit the page: `3000`. You will resolve a very
-nice e-commerce.
+You can open your browser and visit the page: `3000`. ShopMany is a modern
+e-commerce for super nerds.
 
 ## Services
+
 As you can see from the shopmany's README.md there are different services in different
 languages. I am not expecting you to know all of them. I had a couple of friends
 that helped me to write them down too.
@@ -29,19 +31,23 @@ and code only what you know.
 
 Along the course we will get over all of them. I set it up in this way to tell
 you that observability and application instrumentation are practices that are
-over specific languages.
+cross languages. Because we have to understand what is going on overall. With
+the ability to zoom in specific applications if needed.
 
-Every exercise has a `./SOLUTIONS.md` file that contains a `git diff` for every
-application that shows how I implemented the code. The diff contains the commit
-sha in the header. Uses the solution if you are blocked or to
-[cherry-pick](https://git-scm.com/docs/git-cherry-pick) the
-code for the applications that you are not developing.
+At the end of the PDF you can find the solutions. You can look at them all
+together or later as you prefer. Some of them area easy as `git diff` divided by
+application.
 
-For example if you are not working in java with the `pay` application you can
+The diff contains the commit sha in the header. You can
+[cherry-pick](https://git-scm.com/docs/git-cherry-pick) the code
+for the applications that you are not developing or if you are blocked from the
+[gianarb/shopmany](https://github.com/gianarb/shopmany) repository.
+
+For example if you are not working in Java with the `pay` application you can
 cherry pick the java code via:
 
 ```bash
-git cherry-pick 123dfdc
+git cherry-pick <commitSHA>
 ```
 
 ## Exercise: Health endpoint
@@ -108,5 +114,6 @@ a new endpoint.
 
 * [Configure Liveness and Readiness Probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/)
 * [Kubernetes Liveness and Readiness Probes: Looking for More Feet](https://blog.colinbreck.com/kubernetes-liveness-and-readiness-probes-looking-for-more-feet/)
+* [NGINX HTTP Health Checks](https://docs.nginx.com/nginx/admin-guide/load-balancer/http-health-check/)
 
 \newpage
